@@ -16,6 +16,12 @@ if (!isset($_SESSION['user_id'])) {
 $current_user_id = (int) $_SESSION['user_id'];
 $current_user_role = $_SESSION['user_role'] ?? '';
 $normalized_role = strtolower($current_user_role);
+$role_base_map = [
+    'Digitadora' => 'Digitador',
+    'Operadora' => 'Operador',
+    'Checkinera' => 'Checkinero'
+];
+$current_user_role_base = $role_base_map[$current_user_role] ?? $current_user_role;
 $allowed_roles = ['admin', 'digitador', 'digitadora'];
 
 if (!in_array($normalized_role, $allowed_roles, true)) {
@@ -28,11 +34,11 @@ if (!in_array($normalized_role, $allowed_roles, true)) {
 }
 
 $since_timestamp = isset($_GET['since']) ? max(0, (int) $_GET['since']) : (time() - 60);
-$since_datetime = date('Y-m-d H:i:s', $since_timestamp);
+$since_datetime = $since_timestamp > 0 ? date('Y-m-d H:i:s', $since_timestamp) : '1970-01-01 00:00:00';
 
 $user_filter = '';
 if ($normalized_role !== 'admin') {
-    $escaped_role = $conn->real_escape_string($current_user_role);
+    $escaped_role = $conn->real_escape_string($current_user_role_base);
     $user_filter = " AND (t.assigned_to_user_id = {$current_user_id} OR (t.assigned_to_group = '{$escaped_role}' AND (t.assigned_to_user_id IS NULL OR t.assigned_to_user_id = 0)))";
 }
 
@@ -58,7 +64,7 @@ $sql = "
         t.status = 'Pendiente'
         AND ci.status = 'Discrepancia'
         AND (t.priority IN ('Critica', 'Alta') OR a.priority IN ('Critica', 'Alta'))
-        AND COALESCE(a.created_at, t.created_at) > ?
+        AND COALESCE(a.created_at, t.created_at) >= ?
         {$user_filter}
     ORDER BY COALESCE(a.created_at, t.created_at) DESC
     LIMIT 10
@@ -68,6 +74,7 @@ $new_alerts = [];
 $priority_map = ['baja' => 1, 'media' => 2, 'alta' => 3, 'critica' => 4];
 
 $stmt = $conn->prepare($sql);
+$latest_seen_timestamp = $since_timestamp;
 if ($stmt) {
     $stmt->bind_param('s', $since_datetime);
     if ($stmt->execute()) {
@@ -81,12 +88,19 @@ if ($stmt) {
             $final_priority = ($alert_priority_val >= $task_priority_val) ? $alert_priority : $task_priority;
 
             if ($final_priority === 'Critica' || $final_priority === 'Alta') {
+                $created_at_value = $row['alert_created_at'] ?: $row['task_created_at'];
+                if ($created_at_value) {
+                    $row_timestamp = strtotime($created_at_value);
+                    if ($row_timestamp !== false) {
+                        $latest_seen_timestamp = max($latest_seen_timestamp, $row_timestamp);
+                    }
+                }
                 $new_alerts[] = [
                     'id' => $row['alert_id'] ?: $row['task_id'],
                     'title' => $row['alert_title'] ?: $row['task_title'],
                     'description' => $row['alert_description'] ?: $row['task_instruction'],
                     'priority' => $final_priority,
-                    'created_at' => $row['alert_created_at'] ?: $row['task_created_at'],
+                    'created_at' => $created_at_value,
                     'type' => 'discrepancy_alert',
                     'invoice_number' => $row['invoice_number'] ?? null
                 ];
@@ -103,5 +117,5 @@ $conn->close();
 echo json_encode([
     'success' => true,
     'alerts' => $new_alerts,
-    'timestamp' => time()
+    'timestamp' => max(time(), $latest_seen_timestamp)
 ]);
