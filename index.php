@@ -2394,22 +2394,45 @@ function closeToast(toastId) {
 // --- End Toast Notification Function ---
     function showAlertPopup(alertData) {
         if (!alertPopupOverlay || !alertPopup || !alertPopupTitle || !alertPopupDescription || !alertPopupHeader) return;
-        alertPopupTitle.textContent = `¡${alertData.priority}! ${alertData.title || 'Nueva Alerta'}`;
-        alertPopupDescription.textContent = alertData.description || alertData.instruction || 'Revisa tus tareas pendientes.';
+
+        const alertTitle = alertData?.title || 'Nueva Alerta';
+        const alertPriority = alertData?.priority || 'Alta';
+        const descriptionParts = [];
+
+        if (alertData?.description) {
+            descriptionParts.push(alertData.description);
+        } else if (alertData?.instruction) {
+            descriptionParts.push(alertData.instruction);
+        } else {
+            descriptionParts.push('Revisa tus tareas pendientes.');
+        }
+
+        if (alertData?.invoice_number) {
+            descriptionParts.push(`Planilla: ${alertData.invoice_number}`);
+        }
+
+        alertPopupTitle.textContent = `¡${alertPriority}! ${alertTitle}`;
+        alertPopupDescription.textContent = descriptionParts.join(' • ');
+
         alertPopupHeader.className = 'p-4 border-b rounded-t-lg'; // Reset classes
         alertPopupTitle.className = 'text-xl font-bold'; // Reset classes
-        if (alertData.priority === 'Critica') {
+
+        if (alertPriority === 'Critica') {
             alertPopupHeader.classList.add('bg-red-100', 'border-red-200');
             alertPopupTitle.classList.add('text-red-800');
-        } else { // Alta
+        } else {
             alertPopupHeader.classList.add('bg-orange-100', 'border-orange-200');
             alertPopupTitle.classList.add('text-orange-800');
-         }
+        }
+
+        alertPopup.classList.add('scale-95', 'opacity-0');
+        alertPopup.classList.remove('scale-100', 'opacity-100');
         alertPopupOverlay.classList.remove('hidden');
-        setTimeout(() => {
+
+        requestAnimationFrame(() => {
             alertPopup.classList.remove('scale-95', 'opacity-0');
             alertPopup.classList.add('scale-100', 'opacity-100');
-        }, 50);
+        });
     }
 
     
@@ -2540,22 +2563,36 @@ function updateAlertsDisplay(newAlerts) {
 
         // --- Lógica Unificada para Toasts de Alta Prioridad ---
         if (isHighPriority) {
-            // Verificar si ya hemos visto/notificado esta alerta específica
+            const isDiscrepancyAlert = typeof alert.type === 'string' && alert.type.toLowerCase().includes('discrep');
             if (!seenIds.has(alertId)) {
-                console.log(`Alerta ${alertId} es nueva.`); // <-- AÑADIDO
+                console.log(`Alerta ${alertId} es nueva.`);
                 const canNotify = typeof canSeeDiscrepancyToasts === 'function' && canSeeDiscrepancyToasts();
-                console.log(`Rol permite notificar: ${canNotify}, Pestaña visible: ${!document.hidden}`); // <-- AÑADIDO
-                if (canNotify && !document.hidden) { // Solo mostrar si la pestaña está visible y el rol es correcto
-                    const toastType = (alert.priority === 'Critica') ? 'error' : 'warning';
-                    console.log(`Llamando showToast para ${alertId} con tipo ${toastType}`); // <-- AÑADIDO
-                    showToast(`${alert.title || 'Alerta Importante'}`, toastType, 6000); // Usar showToast directamente
-                    newHighPriorityAlertsFound = true; // Marcar para tocar sonido una vez
+                console.log(`Rol permite notificar: ${canNotify}, Pestaña visible: ${!document.hidden}`);
+
+                if (canNotify) {
+                    if (isDiscrepancyAlert && typeof showAlertPopup === 'function') {
+                        console.log(`Mostrando popup emergente para discrepancia ${alertId}`);
+                        showAlertPopup(alert);
+                    }
+
+                    if (!document.hidden) {
+                        const toastType = (alert.priority === 'Critica') ? 'error' : 'warning';
+                        console.log(`Llamando showToast para ${alertId} con tipo ${toastType}`);
+                        showToast(`${alert.title || 'Alerta Importante'}`, toastType, 6000);
+                        newHighPriorityAlertsFound = true;
+                    } else if (isDiscrepancyAlert) {
+                        // Mantener la bandera para reproducir sonido cuando corresponda
+                        newHighPriorityAlertsFound = true;
+                    } else {
+                        console.log(`Toast omitido para ${alertId} (pestaña no visible).`);
+                    }
                 } else {
-                    console.log(`Notificación omitida para ${alertId} (rol o visibilidad)`); // <-- AÑADIDO
+                    console.log(`Notificación omitida para ${alertId} (rol sin permisos).`);
                 }
-                seenIds.add(alertId); // Marcar como vista/notificada
+
+                seenIds.add(alertId);
             } else {
-                console.log(`Alerta ${alertId} ya vista/notificada.`); // <-- AÑADIDO
+                console.log(`Alerta ${alertId} ya vista/notificada.`);
             }
         }
         // --- Fin Lógica Toasts ---
