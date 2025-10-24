@@ -9,7 +9,7 @@ require 'db_connection.php'; // This should define $conn and connection details
 $all_users = [];
 $users_result = $conn->query("SELECT id, name, role, email, gender FROM users ORDER BY name ASC");
 if ($users_result) { while ($row = $users_result->fetch_assoc()) { $all_users[] = $row; } }
-$admin_users_list = ($_SESSION['user_role'] === 'Admin') ? $all_users : [];
+$admin_users_list = (($_SESSION['user_role'] ?? '') === 'Admin') ? $all_users : [];
 
 // --- Lógica de Usuario y Rol ---
 $current_user_id = $_SESSION['user_id'];
@@ -27,6 +27,18 @@ function getRoleDisplayName($role, $gender) {
     }
     return $role;
 }
+
+function normalizeRoleKey($role) {
+    switch ($role) {
+        case 'Digitadora': return 'Digitador';
+        case 'Operadora': return 'Operador';
+        case 'Checkinera': return 'Checkinero';
+        default: return $role;
+    }
+}
+$current_user_role_base = normalizeRoleKey($current_user_role);
+$is_admin = ($current_user_role_base === 'Admin');
+$is_digitador = ($current_user_role_base === 'Digitador');
 $displayRole = getRoleDisplayName($current_user_role, $current_user_gender);
 
 // Clases CSS para roles
@@ -35,7 +47,7 @@ $role_nav_class = 'nav-admin'; // Clase para la navegación
 $role_container_border_class = 'border-gray-400'; // Borde del contenedor de saludo (default)
 $role_container_bg_class = 'bg-gray-50'; // Fondo del contenedor de saludo (default)
 
-switch ($current_user_role) {
+switch ($current_user_role_base) {
     case 'Admin':
         $role_color_class = 'bg-red-200 text-red-800'; $role_nav_class = 'nav-admin';
         $role_container_border_class = 'border-red-400'; $role_container_bg_class = 'bg-red-50'; break;
@@ -59,19 +71,19 @@ $all_pending_items = [];
 // --- FILTRO PARA TAREAS MANUALES ---
 // --- FILTRO PARA TAREAS MANUALES ---
 $task_filter = '';
-if ($current_user_role !== 'Admin') {
-    $escaped_role = $current_user_role; // <-- Simplemente usa la variable de sesión
+if (!$is_admin) {
+    $escaped_role = $conn->real_escape_string($current_user_role_base);
     // Filtro solo para tareas: asignadas a mí O a mi grupo
     $task_filter = " AND (
-        t.assigned_to_user_id = {$current_user_id} 
+        t.assigned_to_user_id = {$current_user_id}
         OR (t.assigned_to_group = '{$escaped_role}' AND t.assigned_to_user_id IS NULL)
     )";
 }
 
 // --- FILTRO PARA ALERTAS (COMBINA LÓGICA NUEVA Y ESTABLE) ---
 $alert_filter = $task_filter; // Empezamos con el filtro de tareas
-if ($current_user_role === 'Digitador') {
-$escaped_role = $current_user_role; // <-- Simplemente usa la variable de sesión    // Lógica especial de la versión estable:
+if ($is_digitador) {
+    $escaped_role = $conn->real_escape_string($current_user_role_base);    // Lógica especial de la versión estable:
     // Muestra si la TAREA es para mí/mi grupo O si la ALERTA es para mi rol
     $alert_filter = " AND (
         (t.assigned_to_user_id = {$current_user_id} OR (t.assigned_to_group = '{$escaped_role}' AND t.assigned_to_user_id IS NULL))
@@ -183,7 +195,7 @@ $medium_priority_badge_count = count($panel_medium_priority_items);
 
 // --- OTRAS CONSULTAS DE DATOS ---
 $completed_tasks = [];
-if ($_SESSION['user_role'] === 'Admin') {
+if ($is_admin) {
     // Consulta para Trazabilidad (Admin)
     $completed_result = $conn->query(
         "SELECT t.id, COALESCE(a.title, t.title) as title, t.instruction, t.priority, t.start_datetime, t.end_datetime, u_assigned.name as assigned_to, u_completed.name as completed_by, t.created_at, t.completed_at, TIMEDIFF(t.completed_at, t.created_at) as response_time, t.assigned_to_group, u_creator.name as created_by_name, t.resolution_note FROM tasks t LEFT JOIN users u_assigned ON t.assigned_to_user_id = u_assigned.id LEFT JOIN users u_completed ON t.completed_by_user_id = u_completed.id LEFT JOIN users u_creator ON t.created_by_user_id = u_creator.id LEFT JOIN alerts a ON t.alert_id = a.id WHERE t.status = 'Completada' ORDER BY t.completed_at DESC" );
@@ -316,7 +328,7 @@ if ($checkins_result) { while ($row = $checkins_result->fetch_assoc()) { $initia
 
 // Historial Operador (Operador y Admin)
 $operator_history = [];
-if (in_array($_SESSION['user_role'], ['Operador', 'Admin', 'Digitador'])) { // Digitador también puede verlo
+if (in_array($current_user_role_base, ['Operador', 'Admin', 'Digitador'])) { // Digitador también puede verlo
     $operator_id_filter = ($_SESSION['user_role'] === 'Operador') ? "WHERE op.operator_id = " . intval($_SESSION['user_id']) : "";
     $history_query = " SELECT op.id, op.check_in_id, op.total_counted, op.discrepancy, op.observations, op.created_at as count_date, ci.invoice_number, ci.declared_value, c.name as client_name, u.name as operator_name FROM operator_counts op INNER JOIN ( SELECT check_in_id, MAX(id) as max_id FROM operator_counts GROUP BY check_in_id ) as latest_oc ON op.id = latest_oc.max_id JOIN check_ins ci ON op.check_in_id = ci.id JOIN clients c ON ci.client_id = c.id JOIN users u ON op.operator_id = u.id {$operator_id_filter} ORDER BY op.created_at DESC ";
     $history_result = $conn->query($history_query);
@@ -326,7 +338,7 @@ if (in_array($_SESSION['user_role'], ['Operador', 'Admin', 'Digitador'])) { // D
 
 // Historial Cierres Digitador (Digitador y Admin)
 $digitador_closed_history = [];
-if (in_array($current_user_role, ['Digitador', 'Admin'])) {
+if (in_array($current_user_role_base, ['Digitador', 'Admin'])) {
    $digitador_filter = "WHERE ci.digitador_status IN ('Procesado', 'Discrepancia', 'Cerrado')";
 
     $closed_history_result = $conn->query(" SELECT ci.id, ci.invoice_number, c.name as client_name, u_check.name as checkinero_name, oc.total_counted, oc.discrepancy, oc.bills_100k, oc.bills_50k, oc.bills_20k, oc.bills_10k, oc.bills_5k, oc.bills_2k, oc.coins, u_op.name as operator_name, ci.closed_by_digitador_at, u_digitador.name as digitador_name, ci.digitador_status, ci.digitador_observations, f.name as fund_name FROM check_ins ci LEFT JOIN clients c ON ci.client_id = c.id LEFT JOIN users u_check ON ci.checkinero_id = u_check.id LEFT JOIN ( SELECT a.* FROM operator_counts a INNER JOIN ( SELECT check_in_id, MAX(id) as max_id FROM operator_counts GROUP BY check_in_id ) b ON a.id = b.max_id ) oc ON ci.id = oc.check_in_id LEFT JOIN users u_op ON oc.operator_id = u_op.id LEFT JOIN users u_digitador ON ci.closed_by_digitador_id = u_digitador.id LEFT JOIN funds f ON ci.fund_id = f.id {$digitador_filter} ORDER BY ci.closed_by_digitador_at DESC, ci.id DESC" );
@@ -519,7 +531,7 @@ $conn->close();
                                 <div class="p-2 bg-<?php echo $color_class; ?>-50 rounded-md border border-<?php echo $color_class; ?>-200 text-sm">
                                     <p class="font-semibold text-<?php echo $color_class; ?>-800"><?php echo htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?><?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span><?php endif; ?></p>
                                     <p class="text-gray-700 text-xs mt-1"><?php echo htmlspecialchars($item['item_type'] === 'manual_task' ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
-                                    <?php if ($_SESSION['user_role'] === 'Admin'): if (!empty($item['assigned_to_group'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-<?php echo $color_class; ?>-200">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></p><?php elseif (!empty($item['assigned_names'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-<?php echo $color_class; ?>-200">Asignada a: <?php echo htmlspecialchars($item['assigned_names']); ?></p><?php endif; endif; ?>
+                                    <?php if ($is_admin): if (!empty($item['assigned_to_group'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-<?php echo $color_class; ?>-200">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></p><?php elseif (!empty($item['assigned_names'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-<?php echo $color_class; ?>-200">Asignada a: <?php echo htmlspecialchars($item['assigned_names']); ?></p><?php endif; endif; ?>
                                     <?php if (!empty($item['end_datetime'])): ?><div class="countdown-timer text-xs font-bold mt-1" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div><?php endif; ?>
                                 </div> <?php endforeach; endif; ?>
                             </div>
@@ -538,7 +550,7 @@ $conn->close();
                                     <div class="p-2 bg-yellow-50 rounded-md border border-yellow-200 text-sm">
                                         <p class="font-semibold text-yellow-800"><?php echo htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?><?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span><?php endif; ?></p>
                                         <p class="text-gray-700 text-xs mt-1"><?php echo htmlspecialchars($item['item_type'] === 'manual_task' ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
-                                        <?php if ($_SESSION['user_role'] === 'Admin'): if (!empty($item['assigned_to_group'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-yellow-200">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></p><?php elseif (!empty($item['assigned_names'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-yellow-200">Asignada a: <?php echo htmlspecialchars($item['assigned_names']); ?></p><?php endif; endif; ?>
+                                        <?php if ($is_admin): if (!empty($item['assigned_to_group'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-yellow-200">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></p><?php elseif (!empty($item['assigned_names'])): ?><p class="text-xs text-blue-700 font-bold mt-1 pt-1 border-t border-yellow-200">Asignada a: <?php echo htmlspecialchars($item['assigned_names']); ?></p><?php endif; endif; ?>
                                         <?php if (!empty($item['end_datetime'])): ?><div class="countdown-timer text-xs font-bold mt-1" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div><?php endif; ?>
                                     </div> <?php endforeach; endif; ?>
                             </div>
@@ -572,11 +584,11 @@ $conn->close();
 </div>
                    </div>
                </div>
-               <?php if ($_SESSION['user_role'] === 'Admin'): ?>
+               <?php if ($is_admin): ?>
                <div class="mt-2 flex flex-wrap justify-start sm:justify-end space-x-2 sm:space-x-4">
                    <?php if (in_array($_SESSION['user_role'], ['Checkinero', 'Admin'])): ?><button id="tab-checkinero" class="header-panel-button nav-checkinero shadow-sm" onclick="switchTab('checkinero')">Panel Check-in</button><?php endif; ?>
                    <?php if (in_array($_SESSION['user_role'], ['Operador', 'Admin'])): ?><button id="tab-operador" class="header-panel-button nav-operador shadow-sm" onclick="switchTab('operador')">Panel Operador</button><?php endif; ?>
-                   <?php if (in_array($_SESSION['user_role'], ['Digitador', 'Admin'])): ?><button id="tab-digitador" class="header-panel-button nav-digitador shadow-sm" onclick="switchTab('digitador')">Panel Digitador</button><?php endif; ?>
+                   <?php if (in_array($current_user_role_base, ['Digitador', 'Admin'])): ?><button id="tab-digitador" class="header-panel-button nav-digitador shadow-sm" onclick="switchTab('digitador')">Panel Digitador</button><?php endif; ?>
                </div>
                <?php endif; ?>
                <div class="mt-2 text-sm font-mono text-blue-700 font-semibold p-2 bg-blue-100 border border-blue-300 rounded-md">
@@ -590,9 +602,9 @@ $conn->close();
                <button id="tab-operaciones" class="nav-tab active <?php echo $role_nav_class; ?>" onclick="switchTab('operaciones')">Panel General</button>
                <?php if ($_SESSION['user_role'] === 'Checkinero'): ?><button id="tab-checkinero" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('checkinero')">Panel Check-in</button><?php endif; ?>
                <?php if ($_SESSION['user_role'] === 'Operador'): ?><button id="tab-operador" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('operador')">Panel Operador</button><?php endif; ?>
-               <?php if ($_SESSION['user_role'] === 'Digitador'): ?><button id="tab-digitador" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('digitador')">Panel Digitador</button><?php endif; ?>
+               <?php if ($current_user_role_base === 'Digitador'): ?><button id="tab-digitador" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('digitador')">Panel Digitador</button><?php endif; ?>
                <button id="tab-mi-historial" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('mi-historial')">Mi Historial de Tareas</button>
-               <?php if ($_SESSION['user_role'] === 'Admin'): ?>
+               <?php if ($is_admin): ?>
                    <button id="tab-roles" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('roles')">Gestión de Roles</button>
                    <button id="tab-manage-clients" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-clients')">Gestionar Clientes</button>
                    <button id="tab-manage-routes" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-routes')">Gestionar Rutas</button>
@@ -627,12 +639,12 @@ $conn->close();
                                 // --- CAMBIO: Condición para mostrar botón "Completar" (sin !$is_group_task) ---
                                 // --- INICIO: Lógica Corregida para $can_complete ---
 // --- INICIO: Lógica Corregida para $can_complete (v2) ---
-$is_admin = $current_user_role === 'Admin';
+$user_is_admin = $is_admin;
 $is_assigned_individually = !empty($item['user_task_id']);
-$is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
+$is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && normalizeRoleKey($item['assigned_to_group']) == $current_user_role_base;
 
 // El usuario puede completar si es Admin O la tarea es suya (individual o grupo)
-$user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
+$user_can_act = $user_is_admin || $is_assigned_individually || $is_assigned_to_my_group;
 
 // La tarea se considera "activa" si:
 // 1. Es una tarea nueva con estado Pendiente
@@ -718,12 +730,12 @@ $can_complete = $user_can_act && $task_is_active;
                                         $form_id_prefix = "np-" . $task_id_to_use;
                                         // --- CAMBIO: Condición para mostrar botón "Completar" (sin !$is_group_task) ---
 // --- INICIO: Lógica Corregida para $can_complete (v2) ---
-$is_admin = $current_user_role === 'Admin';
+$user_is_admin = $is_admin;
 $is_assigned_individually = !empty($item['user_task_id']);
-$is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
+$is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && normalizeRoleKey($item['assigned_to_group']) == $current_user_role_base;
 
 // El usuario puede completar si es Admin O la tarea es suya (individual o grupo)
-$user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
+$user_can_act = $user_is_admin || $is_assigned_individually || $is_assigned_to_my_group;
 
 // La tarea se considera "activa" si:
 // 1. Es una tarea nueva con estado Pendiente
@@ -841,10 +853,10 @@ $can_complete = $user_can_act && $task_is_active;
                 </div>
                 <div id="operator-panel" class="hidden"><div class="bg-white p-6 rounded-xl shadow-lg mb-8"><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-4 border-b"><div><span class="block text-sm text-gray-500">Nro Planilla</span><strong id="display-invoice" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Nro Sello</span><strong id="display-seal" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Cliente</span><strong id="display-client" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Valor Declarado</span><strong id="display-declared" class="text-lg text-blue-600"></strong></div></div><h3 class="text-xl font-semibold mb-4">Detalle de Denominación</h3><form id="denomination-form"><input type="hidden" id="op-checkin-id"><div class="space-y-2"><?php $denominations = [100000, 50000, 20000, 10000, 5000, 2000]; foreach($denominations as $value): ?><div class="grid grid-cols-5 gap-4 items-center denomination-row" data-value="<?php echo $value; ?>"><div class="col-span-2 font-medium text-gray-700"><?php echo '$' . number_format($value, 0, ',', '.'); ?></div><div class="col-span-2 flex items-center"><button type="button" class="px-3 py-1 bg-gray-200 rounded-l-md font-bold text-lg" onclick="updateQty(this, -1)">-</button><input type="number" value="0" min="0" class="w-full text-center border-t border-b p-1 denomination-qty" oninput="calculateTotals()"><button type="button" class="px-3 py-1 bg-gray-200 rounded-r-md font-bold text-lg" onclick="updateQty(this, 1)">+</button></div><div class="text-right font-mono subtotal">$ 0</div></div><?php endforeach; ?><div class="grid grid-cols-5 gap-4 items-center pt-2 border-t"><div class="col-span-2 font-medium text-gray-700">Monedas</div><div class="col-span-2"><input type="number" id="coins-value" value="0" min="0" step="50" class="w-full border p-1" oninput="calculateTotals()" placeholder="Valor total en monedas"></div><div class="text-right font-mono" id="coins-subtotal">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center pt-4 mt-4 border-t-2"><div class="col-span-2 font-bold text-xl">Total</div><div class="col-span-3 text-right font-mono text-xl" id="total-counted">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center"><div class="col-span-2 font-bold text-xl">Diferencia</div><div class="col-span-3 text-right font-mono text-xl" id="discrepancy">$ 0</div></div></div><div class="mt-6"><label for="observations" class="block text-sm font-medium">Observación</label><textarea id="observations" rows="3" class="mt-1 w-full border rounded-md p-2"></textarea></div><div class="mt-6 flex justify-end"><button type="submit" class="bg-green-600 text-white font-bold py-3 px-6 rounded-md hover:bg-green-700">Guardar y Cerrar</button></div></form></div></div>
                 <?php if ($_SESSION['user_role'] === 'Admin'): ?><div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Planillas Pendientes de Detallar (Admin)</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"></thead><tbody id="operator-checkins-table-body"></tbody></table></div></div><?php endif; ?>
-                <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial de Conteos Realizados</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Cliente</th><th class="p-3">Valor Declarado</th><th class="p-3">Valor Contado</th><th class="p-3">Discrep.</th><?php if (in_array($_SESSION['user_role'], ['Admin', 'Digitador'])): ?><th class="p-3">Operador</th><?php endif; ?><th class="p-3">Fecha</th><th class="p-3">Obs.</th><?php if ($_SESSION['user_role'] === 'Admin'): ?><th class="p-3">Acciones</th><?php endif; ?></tr></thead><tbody id="operator-history-table-body"></tbody></table></div></div>
+                <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial de Conteos Realizados</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Cliente</th><th class="p-3">Valor Declarado</th><th class="p-3">Valor Contado</th><th class="p-3">Discrep.</th><?php if (in_array($current_user_role_base, ['Admin', 'Digitador'])): ?><th class="p-3">Operador</th><?php endif; ?><th class="p-3">Fecha</th><th class="p-3">Obs.</th><?php if ($is_admin): ?><th class="p-3">Acciones</th><?php endif; ?></tr></thead><tbody id="operator-history-table-body"></tbody></table></div></div>
             </div>
 
-            <?php if (in_array($_SESSION['user_role'], ['Digitador', 'Admin'])): ?>
+            <?php if (in_array($current_user_role_base, ['Digitador', 'Admin'])): ?>
             <div id="content-digitador" class="hidden">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl font-bold text-gray-900">Módulo de Digitador: Gestión de Cierre e Informes</h2>
@@ -888,7 +900,7 @@ $can_complete = $user_can_act && $task_is_active;
 
                  <div id="panel-historial-cierre" class="hidden">
                     <h2 class="text-2xl font-bold text-gray-900 mb-6">Historial de Planillas Revisadas/Cerradas</h2>
-                    <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial</h3><div class="overflow-auto max-h-[700px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Fondo</th><th class="p-3">Cierre</th><th class="p-3">Total Rec.</th><th class="p-3">Discrep.</th><th class="p-3">Estado</th><th class="p-3">Obs.</th><?php if (in_array($_SESSION['user_role'], ['Admin', 'Digitador'])): ?><th class="p-3">Cerrada por</th><?php endif; ?><th class="p-3">Acciones</th></tr></thead><tbody id="digitador-closed-history-body"></tbody></table></div></div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial</h3><div class="overflow-auto max-h-[700px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Fondo</th><th class="p-3">Cierre</th><th class="p-3">Total Rec.</th><th class="p-3">Discrep.</th><th class="p-3">Estado</th><th class="p-3">Obs.</th><?php if (in_array($current_user_role_base, ['Admin', 'Digitador'])): ?><th class="p-3">Cerrada por</th><?php endif; ?><th class="p-3">Acciones</th></tr></thead><tbody id="digitador-closed-history-body"></tbody></table></div></div>
                 </div>
 
                 <div id="panel-informes" class="hidden">
@@ -904,7 +916,7 @@ $can_complete = $user_can_act && $task_is_active;
                 <div class="bg-white rounded-xl shadow-sm overflow-hidden"><div class="overflow-x-auto"><table id="historial-individual-table" class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Tarea</th><th class="px-6 py-3">Descripción</th><th class="px-6 py-3">P. Ini.</th><th class="px-6 py-3">P. Fin.</th><th class="px-6 py-3">Asig. por</th><th class="px-6 py-3">Check por</th><th class="px-6 py-3">F. Inicio</th><th class="px-6 py-3">F. Fin</th><th class="px-6 py-3">T. Resp.</th><th class="px-6 py-3">Obs. Cierre</th></tr></thead><tbody id="historial-individual-tbody"></tbody></table></div></div>
             </div>
 
-            <?php if ($_SESSION['user_role'] === 'Admin'): ?>
+            <?php if ($is_admin): ?>
             <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
             <div id="content-trazabilidad" class="hidden"><h2 class="text-xl font-bold text-gray-900 mb-4">Trazabilidad de Tareas Completadas</h2><div class="bg-white p-4 rounded-xl shadow-sm mb-6"><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4"><div><label for="filter-start-date" class="text-sm">F. Inicio</label><input type="date" id="filter-start-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-end-date" class="text-sm">F. Fin</label><input type="date" id="filter-end-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-user" class="text-sm">Asignado a</label><select id="filter-user" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-checker" class="text-sm">Check por</label><select id="filter-checker" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-priority" class="text-sm">P. Final</label><select id="filter-priority" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option></select></div><div class="flex items-end space-x-2"><button onclick="applyTrazabilidadFilters()" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md">Filtrar</button><button onclick="exportToExcel()" class="w-full bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Excel</button></div></div></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><div class="overflow-x-auto"><table id="trazabilidad-table" class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Tarea</th><th class="px-6 py-3">Desc.</th><th class="px-6 py-3">P. Ini.</th><th class="px-6 py-3">P. Fin.</th><th class="px-6 py-3 sortable" data-column-name="created_at" onclick="sortTableByDate('created_at')">H. Inicio <span></span></th><th class="px-6 py-3 sortable" data-column-name="completed_at" onclick="sortTableByDate('completed_at')">H. Fin <span></span></th><th class="px-6 py-3">T. Resp.</th><th class="px-6 py-3">Asig. a</th><th class="px-6 py-3">Asig. por</th><th class="px-6 py-3">Check por</th><th class="px-6 py-3">Obs. Cierre</th><th class="px-6 py-3">Acciones</th></tr></thead><tbody id="trazabilidad-tbody"></tbody></table></div></div></div>
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
@@ -914,6 +926,38 @@ $can_complete = $user_can_act && $task_is_active;
         </main>
     </div>
 
+    <div class="fixed top-28 right-6 z-[120] w-full max-w-sm flex flex-col gap-3 items-end">
+        <div id="floating-discrepancy-alert" class="hidden w-full">
+            <div class="bg-white border border-red-200 shadow-2xl rounded-xl overflow-hidden">
+                <div class="bg-red-50 border-b border-red-100 px-4 py-3 flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wide text-red-600">Discrepancia detectada</p>
+                        <h4 id="floating-discrepancy-title" class="text-base font-bold text-gray-900"></h4>
+                    </div>
+                    <button id="floating-discrepancy-close" type="button" class="text-red-500 hover:text-red-700 font-bold text-xl leading-none">&times;</button>
+                </div>
+                <div class="px-4 py-3 space-y-2 text-sm text-gray-700">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-semibold text-gray-600">Prioridad:</span>
+                        <span id="floating-discrepancy-priority" class="px-2 py-0.5 rounded-full text-xs font-semibold"></span>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-semibold text-gray-600">Planilla:</span>
+                        <span id="floating-discrepancy-invoice" class="font-mono text-gray-900"></span>
+                    </div>
+                    <p id="floating-discrepancy-description" class="text-gray-700 leading-snug"></p>
+                    <p id="floating-discrepancy-time" class="text-xs text-gray-500"></p>
+                </div>
+            </div>
+        </div>
+
+        <button id="floating-discrepancy-reopen" type="button" class="hidden bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-lg">
+            Ver discrepancia
+        </button>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 right-4 z-[110] space-y-2"></div>
+
     <script>
 
     // --- Global Variables ---
@@ -921,6 +965,9 @@ $can_complete = $user_can_act && $task_is_active;
     const adminUsersData = <?php echo json_encode($admin_users_list); ?>;
     const currentUserId = <?php echo $current_user_id; ?>;
     const currentUserRole = '<?php echo $current_user_role; ?>';
+    const currentUserRoleBase = '<?php echo $current_user_role_base; ?>';
+    window.currentUserRole = currentUserRole;
+    window.currentUserRoleBase = currentUserRoleBase;
     const apiUrlBase = 'api'; // Base para APIs normales
     const apiRealtimeBase = 'api/realtime'; // --- NUEVO: Base para APIs de tiempo real ---
     const initialCheckins = <?php echo json_encode($initial_checkins); ?>;
@@ -932,10 +979,13 @@ $can_complete = $user_can_act && $task_is_active;
 let lastDiscrepancyIds = new Set();
 let lastDiscrepancyCount = 0;
 let discrepancySnapshotReady = false;
+let floatingDiscrepancyLastAlertId = null;
+let floatingDiscrepancyLastUpdate = 0;
+let floatingDiscrepancyWasClosedByUser = false;
 
 function canSeeDiscrepancyToasts() {
-  const role = (window.currentUserRole || '').toLowerCase();
-  return role === 'admin' || role === 'digitador' || role === 'digitadora';
+  const role = (window.currentUserRoleBase || window.currentUserRole || '').toLowerCase();
+  return role === 'admin' || role === 'digitador';
 }
 // ===== Discrepancias: control anti-spam / multi-pestaña (PÉGALO AQUÍ) =====
 // ===== Discrepancias: control anti-spam / multi-pestaña =====
@@ -996,7 +1046,9 @@ try {
     let alertPollingInterval = null;
     let checkinPollingInterval = null;
     let trazabilidadPollingInterval = null; // Para trazabilidad
-    let lastCheckedAlertTime = Math.floor(Date.now() / 1000);
+    // Iniciamos en 0 para forzar la primera consulta con todo el historial reciente
+    // y permitir que los usuarios vean discrepancias que existían antes de abrir la app.
+    let lastCheckedAlertTime = 0;
     let currentCheckinData = JSON.parse(JSON.stringify(initialCheckins));
     let currentFilteredTrazabilidadData = [];
     let loadedContent = {};
@@ -1251,7 +1303,7 @@ function populateCheckinsTable(rows) {
   const rows = (currentCheckinData || []).filter(ci => visibleStatuses.has(ci.status));
 
   if (rows.length === 0) {
-  const colspan = currentUserRole === 'Admin' ? 12 : 11;
+  const colspan = currentUserRoleBase === 'Admin' ? 12 : 11;
 tbody.innerHTML = `<tr><td colspan="${colspan}"class="px-6 py-4 text-center text-gray-500">
         No hay registros pendientes, rechazados o procesados.
       </td></tr>`;
@@ -1958,7 +2010,7 @@ async function handleCheckinSubmit(event) {
         activeCheckinsIds.clear(); // Asegura empezar limpio
 
         const thead = tbody.previousElementSibling; // el <thead>
-        const hasAdmin = (window.currentUserRole === 'Admin'); // Usar la variable global
+        const hasAdmin = (window.currentUserRoleBase === 'Admin'); // Usar la variable global
 
         // Encabezado (ya estaba corregido para quitar Corrección/Acciones)
             thead.innerHTML = `
@@ -2100,8 +2152,8 @@ function populateOperatorCheckinsTable(checkins) {
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        const showOperatorColumn = (currentUserRole === 'Admin' || currentUserRole === 'Digitador');
-        const colspan = showOperatorColumn ? (currentUserRole === 'Admin' ? 9 : 8) : 7;
+        const showOperatorColumn = (currentUserRoleBase === 'Admin' || currentUserRoleBase === 'Digitador');
+        const colspan = showOperatorColumn ? (currentUserRoleBase === 'Admin' ? 9 : 8) : 7;
 
         if (!historyData || historyData.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">No hay conteos registrados.</td></tr>`; return;
@@ -2110,7 +2162,7 @@ function populateOperatorCheckinsTable(checkins) {
         historyData.forEach(item => {
             const discrepancyClass = item.discrepancy != 0 ? 'text-red-600 font-bold' : 'text-green-600';
             const operatorColumn = showOperatorColumn ? `<td class="p-3">${item.operator_name}</td>` : '';
-            const adminDeleteButton = currentUserRole === 'Admin' ? `<td class="p-3 text-center"><button onclick="deleteCheckIn(${item.check_in_id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
+            const adminDeleteButton = currentUserRoleBase === 'Admin' ? `<td class="p-3 text-center"><button onclick="deleteCheckIn(${item.check_in_id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
 
             tbody.innerHTML += `<tr class="border-b">
                                     <td class="p-3 font-mono">${item.invoice_number}</td>
@@ -2191,7 +2243,7 @@ function populateDigitadorOperatorHistoryTable(historyData) {
         const tbody = document.getElementById('digitador-closed-history-body');
         if (!tbody) return;
         tbody.innerHTML = '';
-        const showCerradaPor = (currentUserRole === 'Admin' || currentUserRole === 'Digitador');
+        const showCerradaPor = (currentUserRoleBase === 'Admin' || currentUserRoleBase === 'Digitador');
         const colspan = showCerradaPor ? 9 : 8; // Adjust colspan
         if (!history || history.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">No hay historial de planillas cerradas.</td></tr>`;
@@ -2206,7 +2258,7 @@ function populateDigitadorOperatorHistoryTable(historyData) {
             else statusBadge = `<span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-1 rounded-full">${item.digitador_status || 'N/A'}</span>`;
 
             let actionButtons = `<button onclick="toggleBreakdown('hist-${item.id}')" class="text-blue-600 text-xs font-semibold">Desglose</button>`;
-            if (currentUserRole === 'Admin') actionButtons += `<button onclick="deleteCheckIn(${item.id})" class="text-red-500 hover:text-red-700 font-semibold text-xs ml-2">Eliminar</button>`;
+            if (currentUserRoleBase === 'Admin') actionButtons += `<button onclick="deleteCheckIn(${item.id})" class="text-red-500 hover:text-red-700 font-semibold text-xs ml-2">Eliminar</button>`;
 
             const cerradaPorCol = showCerradaPor ? `<td class="p-3">${item.digitador_name || 'N/A'}</td>` : '';
 
@@ -2394,22 +2446,45 @@ function closeToast(toastId) {
 // --- End Toast Notification Function ---
     function showAlertPopup(alertData) {
         if (!alertPopupOverlay || !alertPopup || !alertPopupTitle || !alertPopupDescription || !alertPopupHeader) return;
-        alertPopupTitle.textContent = `¡${alertData.priority}! ${alertData.title || 'Nueva Alerta'}`;
-        alertPopupDescription.textContent = alertData.description || alertData.instruction || 'Revisa tus tareas pendientes.';
+
+        const alertTitle = alertData?.title || 'Nueva Alerta';
+        const alertPriority = alertData?.priority || 'Alta';
+        const descriptionParts = [];
+
+        if (alertData?.description) {
+            descriptionParts.push(alertData.description);
+        } else if (alertData?.instruction) {
+            descriptionParts.push(alertData.instruction);
+        } else {
+            descriptionParts.push('Revisa tus tareas pendientes.');
+        }
+
+        if (alertData?.invoice_number) {
+            descriptionParts.push(`Planilla: ${alertData.invoice_number}`);
+        }
+
+        alertPopupTitle.textContent = `¡${alertPriority}! ${alertTitle}`;
+        alertPopupDescription.textContent = descriptionParts.join(' • ');
+
         alertPopupHeader.className = 'p-4 border-b rounded-t-lg'; // Reset classes
         alertPopupTitle.className = 'text-xl font-bold'; // Reset classes
-        if (alertData.priority === 'Critica') {
+
+        if (alertPriority === 'Critica') {
             alertPopupHeader.classList.add('bg-red-100', 'border-red-200');
             alertPopupTitle.classList.add('text-red-800');
-        } else { // Alta
+        } else {
             alertPopupHeader.classList.add('bg-orange-100', 'border-orange-200');
             alertPopupTitle.classList.add('text-orange-800');
-         }
+        }
+
+        alertPopup.classList.add('scale-95', 'opacity-0');
+        alertPopup.classList.remove('scale-100', 'opacity-100');
         alertPopupOverlay.classList.remove('hidden');
-        setTimeout(() => {
+
+        requestAnimationFrame(() => {
             alertPopup.classList.remove('scale-95', 'opacity-0');
             alertPopup.classList.add('scale-100', 'opacity-100');
-        }, 50);
+        });
     }
 
     
@@ -2440,7 +2515,7 @@ function closeToast(toastId) {
                     case 'Discrepancia': statusBadge = `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-1 rounded-full">Discrepancia</span>`; break;
                     default: statusBadge = `<span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-1 rounded-full">Pendiente</span>`; break;
                 }
-                const adminDeleteButton = currentUserRole === 'Admin' ? `<td class="p-2"><button onclick="deleteCheckIn(${ci.id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
+                const adminDeleteButton = currentUserRoleBase === 'Admin' ? `<td class="p-2"><button onclick="deleteCheckIn(${ci.id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
                 const declaredValueFormatted = formatCurrency(ci.declared_value);
                 const createdAtFormatted = new Date(ci.created_at).toLocaleString('es-CO');
                 newRowsHtml += `<tr class="border-b hover:bg-gray-50 new-checkin-row" id="checkin-row-${checkinId}"><td class="p-2">${statusBadge}</td><td class="p-2 font-mono">${ci.invoice_number || ''}</td><td class="p-2 font-mono">${ci.seal_number || ''}</td><td class="p-2 text-right">${declaredValueFormatted}</td><td class="p-2">${ci.route_name || ''}</td><td class="p-2 text-xs whitespace-nowrap">${createdAtFormatted}</td><td class="p-2">${ci.checkinero_name || ''}</td><td class="p-2">${ci.client_name || ''}</td><td class="p-2">${ci.fund_name || 'N/A'}</td>${adminDeleteButton}</tr>`;
@@ -2451,7 +2526,7 @@ function closeToast(toastId) {
             tbody.insertAdjacentHTML('afterbegin', newRowsHtml);
             document.querySelectorAll('.new-checkin-row').forEach(row => { row.style.backgroundColor = '#e0f2fe'; setTimeout(() => { row.style.backgroundColor = ''; row.classList.remove('new-checkin-row'); }, 3000); });
         }
-        if (tbody.children.length === 0) { const colspan = currentUserRole === 'Admin' ? 10 : 9; tbody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">No hay registros pendientes o rechazados.</td></tr>`; }
+        if (tbody.children.length === 0) { const colspan = currentUserRoleBase === 'Admin' ? 10 : 9; tbody.innerHTML = `<tr><td colspan="${colspan}" class="p-4 text-center text-gray-500">No hay registros pendientes o rechazados.</td></tr>`; }
     }
 
 // Función para actualizar tabla Operador Pendientes
@@ -2540,22 +2615,36 @@ function updateAlertsDisplay(newAlerts) {
 
         // --- Lógica Unificada para Toasts de Alta Prioridad ---
         if (isHighPriority) {
-            // Verificar si ya hemos visto/notificado esta alerta específica
+            const isDiscrepancyAlert = typeof alert.type === 'string' && alert.type.toLowerCase().includes('discrep');
             if (!seenIds.has(alertId)) {
-                console.log(`Alerta ${alertId} es nueva.`); // <-- AÑADIDO
+                console.log(`Alerta ${alertId} es nueva.`);
                 const canNotify = typeof canSeeDiscrepancyToasts === 'function' && canSeeDiscrepancyToasts();
-                console.log(`Rol permite notificar: ${canNotify}, Pestaña visible: ${!document.hidden}`); // <-- AÑADIDO
-                if (canNotify && !document.hidden) { // Solo mostrar si la pestaña está visible y el rol es correcto
-                    const toastType = (alert.priority === 'Critica') ? 'error' : 'warning';
-                    console.log(`Llamando showToast para ${alertId} con tipo ${toastType}`); // <-- AÑADIDO
-                    showToast(`${alert.title || 'Alerta Importante'}`, toastType, 6000); // Usar showToast directamente
-                    newHighPriorityAlertsFound = true; // Marcar para tocar sonido una vez
+                console.log(`Rol permite notificar: ${canNotify}, Pestaña visible: ${!document.hidden}`);
+
+                if (canNotify) {
+                    if (isDiscrepancyAlert && typeof showAlertPopup === 'function') {
+                        console.log(`Mostrando popup emergente para discrepancia ${alertId}`);
+                        showAlertPopup(alert);
+                    }
+
+                    if (!document.hidden) {
+                        const toastType = (alert.priority === 'Critica') ? 'error' : 'warning';
+                        console.log(`Llamando showToast para ${alertId} con tipo ${toastType}`);
+                        showToast(`${alert.title || 'Alerta Importante'}`, toastType, 6000);
+                        newHighPriorityAlertsFound = true;
+                    } else if (isDiscrepancyAlert) {
+                        // Mantener la bandera para reproducir sonido cuando corresponda
+                        newHighPriorityAlertsFound = true;
+                    } else {
+                        console.log(`Toast omitido para ${alertId} (pestaña no visible).`);
+                    }
                 } else {
-                    console.log(`Notificación omitida para ${alertId} (rol o visibilidad)`); // <-- AÑADIDO
+                    console.log(`Notificación omitida para ${alertId} (rol sin permisos).`);
                 }
-                seenIds.add(alertId); // Marcar como vista/notificada
+
+                seenIds.add(alertId);
             } else {
-                console.log(`Alerta ${alertId} ya vista/notificada.`); // <-- AÑADIDO
+                console.log(`Alerta ${alertId} ya vista/notificada.`);
             }
         }
         // --- Fin Lógica Toasts ---
@@ -2583,7 +2672,82 @@ function updateAlertsDisplay(newAlerts) {
         const noAlertsMsg = mediumPriorityList.querySelector('.text-gray-500');
         if (noAlertsMsg) noAlertsMsg.remove();
     }
+
+    refreshFloatingDiscrepancyBanner(newAlerts);
 } // <-- Esta es la llave de cierre que faltaba
+
+function refreshFloatingDiscrepancyBanner(alerts) {
+    const container = document.getElementById('floating-discrepancy-alert');
+    const titleEl = document.getElementById('floating-discrepancy-title');
+    const descEl = document.getElementById('floating-discrepancy-description');
+    const invoiceEl = document.getElementById('floating-discrepancy-invoice');
+    const timeEl = document.getElementById('floating-discrepancy-time');
+    const priorityEl = document.getElementById('floating-discrepancy-priority');
+    const reopenBtn = document.getElementById('floating-discrepancy-reopen');
+
+    if (!container || !titleEl || !descEl || !invoiceEl || !timeEl || !priorityEl) {
+        return;
+    }
+
+    const relevantAlerts = Array.isArray(alerts)
+        ? alerts.filter(alert => typeof alert.type === 'string' && alert.type.toLowerCase().includes('discrep'))
+        : [];
+
+    if (relevantAlerts.length === 0) {
+        container.classList.add('hidden');
+        if (reopenBtn) {
+            reopenBtn.classList.add('hidden');
+        }
+        floatingDiscrepancyLastAlertId = null;
+        floatingDiscrepancyWasClosedByUser = false;
+        return;
+    }
+
+    relevantAlerts.sort((a, b) => {
+        const priorityOrder = { 'Critica': 3, 'Alta': 2, 'Media': 1, 'Baja': 0 };
+        const priorityDiff = (priorityOrder[b.priority] ?? 0) - (priorityOrder[a.priority] ?? 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeB - timeA;
+    });
+
+    const chosen = relevantAlerts[0];
+    if (!chosen) {
+        return;
+    }
+
+    if (floatingDiscrepancyWasClosedByUser && chosen.id === floatingDiscrepancyLastAlertId) {
+        if (reopenBtn) {
+            reopenBtn.classList.remove('hidden');
+        }
+        return;
+    }
+
+    titleEl.textContent = chosen.title || 'Alerta de discrepancia';
+    descEl.textContent = chosen.description || 'Revisa la discrepancia pendiente lo antes posible.';
+    invoiceEl.textContent = chosen.invoice_number ? `#${chosen.invoice_number}` : 'Sin planilla asignada';
+    const formattedCreatedAt = chosen.created_at ? formatDate(chosen.created_at) : '';
+    timeEl.textContent = formattedCreatedAt ? `Registrada ${formattedCreatedAt}` : '';
+
+    const priority = chosen.priority || 'Alta';
+    let priorityClass = 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+    if (priority === 'Critica') {
+        priorityClass = 'bg-red-100 text-red-700 border border-red-200';
+    } else if (priority === 'Alta') {
+        priorityClass = 'bg-orange-100 text-orange-700 border border-orange-200';
+    }
+    priorityEl.className = `px-2 py-0.5 rounded-full text-xs font-semibold ${priorityClass}`;
+    priorityEl.textContent = priority;
+
+    container.classList.remove('hidden');
+    if (reopenBtn) {
+        reopenBtn.classList.add('hidden');
+    }
+    floatingDiscrepancyLastAlertId = chosen.id || null;
+    floatingDiscrepancyLastUpdate = Date.now();
+    floatingDiscrepancyWasClosedByUser = false;
+}
 // --- Polling Control ---
 
 function startAlertPolling(intervalSeconds = 15) {
@@ -2738,7 +2902,7 @@ async function pollAlerts() {
             activeTabElement?.classList.add('active'); // Activate the button/tab
 
             stopCheckinPolling();
-            if (tabName === 'checkinero' || (tabName === 'operador' && currentUserRole === 'Admin')) {
+            if (tabName === 'checkinero' || (tabName === 'operador' && currentUserRoleBase === 'Admin')) {
                  startCheckinPolling(10);
             }
 // ***** PEGA ESTE BLOQUE NUEVO AQUÍ *****
@@ -2831,11 +2995,34 @@ async function pollAlerts() {
     // --- Initialization ---
     document.addEventListener('DOMContentLoaded', () => {
         startAlertPolling(10);
+        const floatingAlert = document.getElementById('floating-discrepancy-alert');
+        const floatingCloseBtn = document.getElementById('floating-discrepancy-close');
+        const floatingReopenBtn = document.getElementById('floating-discrepancy-reopen');
+        if (floatingCloseBtn) {
+            floatingCloseBtn.addEventListener('click', () => {
+                floatingDiscrepancyWasClosedByUser = true;
+                if (floatingAlert) {
+                    floatingAlert.classList.add('hidden');
+                }
+                if (floatingReopenBtn) {
+                    floatingReopenBtn.classList.remove('hidden');
+                }
+            });
+        }
+        if (floatingReopenBtn) {
+            floatingReopenBtn.addEventListener('click', () => {
+                floatingDiscrepancyWasClosedByUser = false;
+                if (floatingAlert) {
+                    floatingAlert.classList.remove('hidden');
+                }
+                floatingReopenBtn.classList.add('hidden');
+            });
+        }
         const savedTab = sessionStorage.getItem('activeTab') || 'operaciones';
 
-        if (document.getElementById('user-table-body') && currentUserRole === 'Admin') populateUserTable(adminUsersData);
+        if (document.getElementById('user-table-body') && currentUserRoleBase === 'Admin') populateUserTable(adminUsersData);
         if (document.getElementById('historial-individual-tbody')) populateUserHistoryTable(userCompletedTasksData);
-        if (currentUserRole === 'Admin' && document.getElementById('trazabilidad-tbody')) {
+        if (currentUserRoleBase === 'Admin' && document.getElementById('trazabilidad-tbody')) {
             currentFilteredTrazabilidadData = [...completedTasksData];
             populateTrazabilidadTable(currentFilteredTrazabilidadData);
         }
@@ -2844,7 +3031,7 @@ async function pollAlerts() {
              document.getElementById('checkin-form')?.addEventListener('submit', handleCheckinSubmit);
         }
         if (document.getElementById('content-operador')) {
-            if (currentUserRole === 'Admin') populateOperatorCheckinsTable(initialCheckins);
+            if (currentUserRoleBase === 'Admin') populateOperatorCheckinsTable(initialCheckins);
             populateOperatorHistoryTable(operatorHistoryData);
             document.getElementById('consultation-form')?.addEventListener('submit', handleConsultation);
             document.getElementById('denomination-form')?.addEventListener('submit', handleDenominationSave);
@@ -2984,8 +3171,5 @@ setInterval(() => {
     }); // Cierre del addEventListener 'DOMContentLoaded'
 </script>
 
-   <div id="toast-container" class="fixed bottom-4 right-4 z-[110] space-y-2">
-   </div>
-    
 </body>
 </html>
