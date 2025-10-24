@@ -996,7 +996,9 @@ try {
     let alertPollingInterval = null;
     let checkinPollingInterval = null;
     let trazabilidadPollingInterval = null; // Para trazabilidad
-    let lastCheckedAlertTime = Math.floor(Date.now() / 1000);
+    // Iniciamos en 0 para forzar la primera consulta con todo el historial reciente
+    // y permitir que los usuarios vean discrepancias que existían antes de abrir la app.
+    let lastCheckedAlertTime = 0;
     let currentCheckinData = JSON.parse(JSON.stringify(initialCheckins));
     let currentFilteredTrazabilidadData = [];
     let loadedContent = {};
