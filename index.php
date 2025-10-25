@@ -1454,7 +1454,7 @@ async function completeTask(taskId, formIdPrefix) {
 
         let payload = {
             instruction: instruction,
-            type: alertId ? 'Asignacion' : 'Manual', // Determinar tipo basado en si hay alertId
+            type: 'Asignacion', // Siempre es 'Asignacion' para esta función
             task_id: taskId,
             alert_id: alertId
         };

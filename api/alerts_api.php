@@ -301,9 +301,9 @@ if ($method === 'POST') {
         // Crear tarea manual individual
         if ($title) {
              $stmt = $conn->prepare("INSERT INTO tasks (title, instruction, priority, assigned_to_user_id, type, start_datetime, end_datetime, created_by_user_id) VALUES (?, ?, ?, ?, 'Manual', ?, ?, ?)");
-             // 7 placeholders -> "sssissi"
+             // 7 placeholders -> "sssisssi"
              if ($stmt) {
-                 $stmt->bind_param("sssissi", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
+                 $stmt->bind_param("sssisssi", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
              }
         } else {
              http_response_code(400);
