@@ -279,10 +279,10 @@ if ($method === 'POST') {
     } elseif ($type === 'Asignacion') {
         // Asignación individual
         if ($task_id) { // Re-asignar tarea existente
-            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, priority = ?, start_datetime = ?, end_datetime = ?, created_at = NOW() WHERE id = ?");
-             // 6 placeholders -> "issssi"
+            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL WHERE id = ?");
+             // 3 placeholders -> "isi"
              if ($stmt) {
-                 $stmt->bind_param("issssi", $user_id, $instruction, $priority, $start_datetime, $end_datetime, $task_id);
+                 $stmt->bind_param("isi", $user_id, $instruction, $task_id);
              }
              $is_update = true;
         } elseif ($alert_id) { // Crear tarea nueva desde alerta
