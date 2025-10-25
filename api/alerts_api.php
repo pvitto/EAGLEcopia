@@ -279,8 +279,8 @@ if ($method === 'POST') {
     } elseif ($type === 'Asignacion') {
         // Asignación individual
         if ($task_id) { // Re-asignar tarea existente
-            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, status = 'Pendiente', priority = ?, start_datetime = ?, end_datetime = ?, created_at = NOW() WHERE id = ?");
-             // 7 placeholders -> "issssi"
+            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, priority = ?, start_datetime = ?, end_datetime = ?, created_at = NOW() WHERE id = ?");
+             // 6 placeholders -> "issssi"
              if ($stmt) {
                  $stmt->bind_param("issssi", $user_id, $instruction, $priority, $start_datetime, $end_datetime, $task_id);
              }
@@ -301,9 +301,9 @@ if ($method === 'POST') {
         // Crear tarea manual individual
         if ($title) {
              $stmt = $conn->prepare("INSERT INTO tasks (title, instruction, priority, assigned_to_user_id, type, start_datetime, end_datetime, created_by_user_id) VALUES (?, ?, ?, ?, 'Manual', ?, ?, ?)");
-             // 7 placeholders -> "sssisssi"
+             // 7 placeholders -> "sssissi"
              if ($stmt) {
-                 $stmt->bind_param("sssisssi", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
+                 $stmt->bind_param("sssissi", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
              }
         } else {
              http_response_code(400);
