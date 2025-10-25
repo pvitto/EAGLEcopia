@@ -851,7 +851,8 @@ $can_complete = $user_can_act && $task_is_active;
                 </div>
 
 
-                <div class="lg:col-span-2 space-y-4 mb-8">
+                <div class="flex justify-center mb-8">
+                    <div class="lg:col-span-2 space-y-4 w-full max-w-4xl">
     <div class="flex justify-between items-center">
         <h2 class="text-xl font-bold text-gray-900">Alertas y Tareas Prioritarias</h2>
         <div id="digitador-carousel-controls" class="flex items-center space-x-2">
@@ -932,6 +933,7 @@ $can_complete = $user_can_act && $task_is_active;
         <?php endforeach; endif; ?>
     </div>
                 </div>
+</div>
                             <div class="mb-8 flex space-x-2">
     <button id="btn-supervision-operador" class="px-4 py-2 text-sm font-semibold rounded-md bg-gray-200 text-gray-700">Abrir llegadas de Operador</button>
     
