@@ -1,6 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php'; // Asegúrate que esta ruta sea correcta
+require_once '../send_email.php'; // Incluir la nueva utilidad de correo
 header('Content-Type: application/json');
 
 // Para depuración (puedes comentar esto en producción)
@@ -86,6 +87,7 @@ if ($method === 'POST') {
     $priority = $data['priority'] ?? 'Media';
     $start_datetime = !empty($data['start_datetime']) ? $data['start_datetime'] : null; // Podría necesitar validación de formato
     $end_datetime = !empty($data['end_datetime']) ? $data['end_datetime'] : null; // Podría necesitar validación de formato
+    $notify_by_email = isset($data['notify_by_email']) ? (bool)$data['notify_by_email'] : false; // Nuevo parámetro
 
     // Validaciones
     if ($type !== 'Recordatorio' && $user_id === null && $assign_to_group === null) {
@@ -113,10 +115,11 @@ if ($method === 'POST') {
             $valid_roles = ['Operador', 'Checkinero', 'Digitador', 'Admin'];
             $stmt_users = null;
 
+            // Cambiar la consulta para obtener también nombre y email
             if ($assign_to_group === 'todos') {
-                $stmt_users = $conn->prepare("SELECT id, role FROM users");
+                $stmt_users = $conn->prepare("SELECT id, role, name, email FROM users");
             } elseif (in_array($assign_to_group, $valid_roles)) {
-                $stmt_users = $conn->prepare("SELECT id, role FROM users WHERE role = ?");
+                $stmt_users = $conn->prepare("SELECT id, role, name, email FROM users WHERE role = ?");
                 if ($stmt_users) {
                     $stmt_users->bind_param("s", $assign_to_group);
                 }
@@ -131,7 +134,7 @@ if ($method === 'POST') {
             $stmt_users->execute();
             $result_users = $stmt_users->get_result();
             while ($row = $result_users->fetch_assoc()) {
-                $userIds[] = $row; // Guardamos {id, role}
+                $userIds[] = $row; // Ahora guardamos {id, role, name, email}
             }
             $stmt_users->close();
 
@@ -142,10 +145,8 @@ if ($method === 'POST') {
             $stmt_task = null;
             if ($type === 'Manual') {
                 if (!$title) throw new Exception("El título es requerido para tareas manuales grupales.");
-                // CORRECCIÓN: Los últimos 2 placeholders (? ?) son para start/end datetime
                 $stmt_task = $conn->prepare("INSERT INTO tasks (title, instruction, priority, assigned_to_user_id, assigned_to_group, type, start_datetime, end_datetime, created_by_user_id) VALUES (?, ?, ?, ?, ?, 'Manual', ?, ?, ?)");
             } elseif ($type === 'Asignacion' && $alert_id) {
-                // Obtener prioridad de la alerta si no se especificó una para la tarea
                  if (empty($priority) || !in_array($priority, ['Baja', 'Media', 'Alta', 'Critica'])) {
                      $prio_res = $conn->query("SELECT priority FROM alerts WHERE id = " . intval($alert_id));
                      $priority = $prio_res ? ($prio_res->fetch_assoc()['priority'] ?? 'Media') : 'Media';
@@ -163,24 +164,34 @@ if ($method === 'POST') {
                 $group_name_to_assign = ($assign_to_group === 'todos') ? $role_of_user : $assign_to_group;
 
                 if ($type === 'Manual') {
-                     // 8 placeholders -> "sssissiii" (9 si contamos el ID del creador)
-                     // title, instruction, priority, uid, group_name_to_assign, start_datetime, end_datetime, creator_id
                     $stmt_task->bind_param("sssisssi", $title, $instruction, $priority, $uid, $group_name_to_assign, $start_datetime, $end_datetime, $creator_id);
                 } elseif ($type === 'Asignacion') {
-                    // 6 placeholders -> "iissis"
-                    // alert_id, uid, group_name_to_assign, instruction, priority, creator_id
                     $stmt_task->bind_param("iissis", $alert_id, $uid, $group_name_to_assign, $instruction, $priority, $creator_id);
                 }
                 if (!$stmt_task->execute()) {
-                    // Log detallado del error
                     error_log("Error insertando tarea grupal para user ID $uid: " . $stmt_task->error . " | Alert ID: " . ($alert_id ?? 'N/A') . " | Group: " . $assign_to_group);
-                    // Podrías decidir continuar o detenerte aquí
-                    // throw new Exception("Error al insertar tarea para usuario ID $uid: " . $stmt_task->error);
+                }
+
+                // --- NUEVO: Enviar correo si se solicitó ---
+                if ($notify_by_email && !empty($user_row['email'])) {
+                    $email_title = $title ?: 'Nueva Tarea/Alerta Asignada';
+                    $subject = "[EAGLE 3.0] Tarea Grupal Asignada: " . $email_title;
+                    $body = "
+                        <h1>Hola " . htmlspecialchars($user_row['name']) . ",</h1>
+                        <p>Se ha asignado una nueva tarea al grupo '" . htmlspecialchars($assign_to_group) . "' en el sistema EAGLE 3.0.</p>
+                        <hr>
+                        <p><strong>Tarea:</strong> " . htmlspecialchars($email_title) . "</p>
+                        <p><strong>Instrucción:</strong> " . htmlspecialchars($instruction) . "</p>
+                        <p><strong>Prioridad:</strong> " . htmlspecialchars($priority) . "</p>
+                        <p>Por favor, ingresa a la plataforma para ver los detalles completos.</p>
+                        <br>
+                        <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                    ";
+                    send_email_notification($user_row['email'], $user_row['name'], $subject, $body);
                 }
             }
             $stmt_task->close();
 
-            // Marcar alerta como asignada solo después de insertar tareas
             if ($type === 'Asignacion' && $alert_id) {
                 $update_alert_stmt = $conn->prepare("UPDATE alerts SET status = 'Asignada' WHERE id = ?");
                  if ($update_alert_stmt) {
@@ -189,7 +200,6 @@ if ($method === 'POST') {
                     $update_alert_stmt->close();
                  } else {
                     error_log("Error preparando update de alerta: " . $conn->error);
-                    // No lanzar excepción, pero registrar el problema
                  }
             }
 
@@ -198,25 +208,24 @@ if ($method === 'POST') {
 
         } catch (Exception $e) {
             $conn->rollback();
-            http_response_code(500); // Internal Server Error
+            http_response_code(500);
             error_log("Error en asignación grupal: " . $e->getMessage());
             echo json_encode(['success' => false, 'error' => 'Error en la asignación grupal: ' . $e->getMessage()]);
         }
-        $conn->close(); // Cerrar conexión
+        $conn->close();
         exit;
-    } // Fin asignación grupal
+    }
 
     // ===== LÓGICA PARA ASIGNACIÓN INDIVIDUAL Y RECORDATORIOS =====
     $stmt = null;
     $is_update = false;
 
     if ($type === 'Recordatorio') {
-        $target_user_id = $user_id; // Ya validado como INT o null al inicio
-        // *** CORRECCIÓN Error 1: Lógica para obtener el título ***
-        $taskTitle = "ID " . ($alert_id ?: ($task_id ?: 'Desconocido')); // Título por defecto
+        $target_user_id = $user_id;
+        $taskTitle = "ID " . ($alert_id ?: ($task_id ?: 'Desconocido'));
         $display_title = null;
 
-        try { // Envolver la lógica de consulta en try-catch
+        try {
             if ($task_id) {
                 $stmt_title = $conn->prepare("SELECT COALESCE(a.title, t.title) as display_title FROM tasks t LEFT JOIN alerts a ON t.alert_id = a.id WHERE t.id = ?");
                 if ($stmt_title) {
@@ -224,15 +233,10 @@ if ($method === 'POST') {
                     if ($stmt_title->execute()) {
                         $result_title = $stmt_title->get_result();
                         if ($result_title && $result_title->num_rows > 0) {
-                            $row = $result_title->fetch_assoc();
-                            $display_title = $row['display_title'];
+                            $display_title = $result_title->fetch_assoc()['display_title'];
                         }
-                    } else {
-                        error_log("Error ejecutando consulta de título para tarea ID $task_id: " . $stmt_title->error);
                     }
                     $stmt_title->close();
-                } else {
-                     error_log("Error preparando consulta de título para tarea ID $task_id: " . $conn->error);
                 }
             } elseif ($alert_id) {
                 $stmt_title = $conn->prepare("SELECT title as display_title FROM alerts WHERE id = ?");
@@ -241,31 +245,21 @@ if ($method === 'POST') {
                      if ($stmt_title->execute()) {
                         $result_title = $stmt_title->get_result();
                         if ($result_title && $result_title->num_rows > 0) {
-                            $row = $result_title->fetch_assoc();
-                            $display_title = $row['display_title'];
+                             $display_title = $result_title->fetch_assoc()['display_title'];
                         }
-                    } else {
-                        error_log("Error ejecutando consulta de título para alerta ID $alert_id: " . $stmt_title->error);
                     }
                     $stmt_title->close();
-                } else {
-                     error_log("Error preparando consulta de título para alerta ID $alert_id: " . $conn->error);
                 }
             }
-
             if (!empty($display_title)) {
                 $taskTitle = $display_title;
             }
         } catch (Exception $e) {
             error_log("Excepción al buscar título para recordatorio: " . $e->getMessage());
-            // Continuar con el título por defecto
         }
-        // *** FIN CORRECCIÓN Error 1 ***
 
         $message = "Recordatorio sobre: '" . $conn->real_escape_string($taskTitle) . "'";
-    
- $stmt = $conn->prepare("INSERT INTO reminders (user_id, message, created_by_user_id, created_at) VALUES (?, ?, ?, NOW())");
-        // *** CORRECCIÓN Error 1: Verificar $stmt antes de bind_param ***
+        $stmt = $conn->prepare("INSERT INTO reminders (user_id, message, created_by_user_id, created_at) VALUES (?, ?, ?, NOW())");
         if ($stmt) {
               $stmt->bind_param("isi", $target_user_id, $message, $creator_id);
         } else {
@@ -277,31 +271,25 @@ if ($method === 'POST') {
         }
 
     } elseif ($type === 'Asignacion') {
-        // Asignación individual
-        if ($task_id) { // Re-asignar tarea existente
+        if ($task_id) { // Re-asignar
             $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, status = 'Pendiente', priority = ?, start_datetime = ?, end_datetime = ?, created_at = NOW() WHERE id = ?");
-             // 7 placeholders -> "issssi"
              if ($stmt) {
                  $stmt->bind_param("issssi", $user_id, $instruction, $priority, $start_datetime, $end_datetime, $task_id);
              }
              $is_update = true;
-        } elseif ($alert_id) { // Crear tarea nueva desde alerta
-            // Obtener prioridad de la alerta si no se especificó
+        } elseif ($alert_id) { // Crear nueva tarea desde alerta
              $prio_res = $conn->query("SELECT priority FROM alerts WHERE id = " . intval($alert_id));
              $original_priority = $prio_res ? ($prio_res->fetch_assoc()['priority'] ?? 'Media') : 'Media';
              $final_priority = !empty($priority) ? $priority : $original_priority;
 
             $stmt = $conn->prepare("INSERT INTO tasks (alert_id, assigned_to_user_id, instruction, type, status, priority, created_by_user_id, created_at) VALUES (?, ?, ?, 'Asignacion', 'Pendiente', ?, ?, NOW())");
-             // 6 placeholders -> "iissis"
              if ($stmt) {
                  $stmt->bind_param("iissis", $alert_id, $user_id, $instruction, $final_priority, $creator_id);
              }
         }
     } elseif ($type === 'Manual') {
-        // Crear tarea manual individual
         if ($title) {
              $stmt = $conn->prepare("INSERT INTO tasks (title, instruction, priority, assigned_to_user_id, type, start_datetime, end_datetime, created_by_user_id) VALUES (?, ?, ?, ?, 'Manual', ?, ?, ?)");
-             // 8 placeholders -> "sssissii"
              if ($stmt) {
                  $stmt->bind_param("sssissii", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
              }
@@ -313,20 +301,47 @@ if ($method === 'POST') {
         }
     }
 
-    // Ejecutar la consulta preparada (si se preparó correctamente)
     if ($stmt) {
         if ($stmt->execute()) {
-            // Actualizar estado de alerta si fue una asignación desde alerta
             if ($type === 'Asignacion' && $alert_id && !$is_update) {
                  $update_alert_stmt = $conn->prepare("UPDATE alerts SET status = 'Asignada' WHERE id = ?");
                  if ($update_alert_stmt) {
                      $update_alert_stmt->bind_param("i", $alert_id);
                      $update_alert_stmt->execute();
                      $update_alert_stmt->close();
-                 } else {
-                     error_log("Error preparando update de alerta post-asignación: " . $conn->error);
                  }
             }
+
+            // --- NUEVO: Enviar correo si se solicitó para asignación individual/manual ---
+            if ($notify_by_email && $user_id && $type !== 'Recordatorio') {
+                $stmt_user = $conn->prepare("SELECT name, email FROM users WHERE id = ?");
+                if ($stmt_user) {
+                    $stmt_user->bind_param("i", $user_id);
+                    $stmt_user->execute();
+                    $result_user = $stmt_user->get_result();
+                    if ($user_data = $result_user->fetch_assoc()) {
+                        if (!empty($user_data['email'])) {
+                            $email_title = $title ?: 'Nueva Tarea/Alerta Asignada';
+                            $subject = "[EAGLE 3.0] Tarea Asignada: " . $email_title;
+                            $body = "
+                                <h1>Hola " . htmlspecialchars($user_data['name']) . ",</h1>
+                                <p>Se te ha asignado una nueva tarea en el sistema de alertas EAGLE 3.0.</p>
+                                <hr>
+                                <p><strong>Tarea:</strong> " . htmlspecialchars($email_title) . "</p>
+                                <p><strong>Instrucción:</strong> " . htmlspecialchars($instruction) . "</p>
+                                <p><strong>Prioridad:</strong> " . htmlspecialchars($priority) . "</p>
+                                <p>Por favor, ingresa a la plataforma para ver los detalles completos.</p>
+                                <br>
+                                <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                            ";
+                            send_email_notification($user_data['email'], $user_data['name'], $subject, $body);
+                        }
+                    }
+                    $stmt_user->close();
+                }
+            }
+            // --- FIN NUEVO ---
+
             $message = ($type === 'Recordatorio') ? 'Recordatorio creado.' : ($is_update ? 'Tarea reasignada.' : 'Tarea asignada.');
             echo json_encode(['success' => true, 'message' => $message]);
         } else {
@@ -336,7 +351,6 @@ if ($method === 'POST') {
         }
         $stmt->close();
     } else {
-        // Este error solo debería ocurrir si $type es inválido o faltan datos cruciales no validados antes
         http_response_code(400);
          error_log("Error preparando statement en alerts_api.php - Tipo: $type, TaskID: $task_id, AlertID: $alert_id, UserID: $user_id");
         echo json_encode(['success' => false, 'error' => 'No se pudo preparar la consulta (Tipo de acción inválido o faltan datos).']);

@@ -681,7 +681,11 @@ $can_complete = $user_can_act && $task_is_active;
                                      <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                      <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                      <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
+                                     <div class="flex items-center pt-2">
+                                         <input type="checkbox" id="assign-task-notify-<?php echo $form_id_prefix; ?>" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                                         <label for="assign-task-notify-<?php echo $form_id_prefix; ?>" class="ml-2 block text-sm text-gray-700">Notificar por correo</label>
+                                     </div>
+                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-3 rounded-md">Confirmar</button>
                                 </div>
                                 <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                      <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
@@ -700,7 +704,21 @@ $can_complete = $user_can_act && $task_is_active;
                     <div class="space-y-8">
                         <div class="bg-white p-6 rounded-xl shadow-sm">
                             <h2 class="text-lg font-semibold text-gray-900 mb-4">Crear Tarea Manual</h2>
-                            <form id="manual-task-form" class="space-y-3"><div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div><div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div><div class="grid grid-cols-2 gap-4"><div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div></div><div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div><button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-md">Crear Tarea</button></form>
+                            <form id="manual-task-form" class="space-y-3">
+                                <div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div>
+                                <div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div>
+                                <div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div>
+                                    <div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div>
+                                </div>
+                                <div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div>
+                                <div class="flex items-center pt-2">
+                                    <input type="checkbox" id="manual-task-notify" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                                    <label for="manual-task-notify" class="ml-2 block text-sm text-gray-700">Notificar por correo</label>
+                                </div>
+                                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 mt-3 rounded-md">Crear Tarea</button>
+                            </form>
                         </div>
 
                         <div class="bg-white p-6 rounded-xl shadow-sm">
@@ -770,7 +788,11 @@ $can_complete = $user_can_act && $task_is_active;
                                             <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                             <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                             <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
+                                            <div class="flex items-center pt-2">
+                                                <input type="checkbox" id="assign-task-notify-<?php echo $form_id_prefix; ?>" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                                                <label for="assign-task-notify-<?php echo $form_id_prefix; ?>" class="ml-2 block text-sm text-gray-700">Notificar por correo</label>
+                                            </div>
+                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-3 rounded-md">Confirmar</button>
                                         </div>
                                         <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                             <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
@@ -1418,14 +1440,16 @@ async function completeTask(taskId, formIdPrefix) {
     async function submitAssignment(alertId, taskId, formIdPrefix) {
         const assignSelect = document.getElementById(`assign-user-${formIdPrefix}`);
         const instructionTextarea = document.getElementById(`task-instruction-${formIdPrefix}`);
+        const notifyCheckbox = document.getElementById(`assign-task-notify-${formIdPrefix}`); // Obtener el checkbox
 
-         if (!assignSelect || !instructionTextarea) {
+         if (!assignSelect || !instructionTextarea || !notifyCheckbox) {
               console.error("Elementos de formulario no encontrados para asignar tarea.");
               return;
          }
 
         const selectedValue = assignSelect.value;
         const instruction = instructionTextarea.value;
+        const notify_by_email = notifyCheckbox.checked; // Leer el valor del checkbox
 
         // Validar que se seleccionó algo
         if (!selectedValue) {
@@ -1435,9 +1459,10 @@ async function completeTask(taskId, formIdPrefix) {
 
         let payload = {
             instruction: instruction,
-            type: alertId ? 'Asignacion' : 'Manual', // Determinar tipo basado en si hay alertId
+            type: alertId ? 'Asignacion' : 'Manual', // Corregido: La API espera 'Manual' para reasignaciones sin alerta
             task_id: taskId,
-            alert_id: alertId
+            alert_id: alertId,
+            notify_by_email: notify_by_email // Añadir al payload
         };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
@@ -1540,11 +1565,12 @@ async function handleCheckinSubmit(event) {
         const priority = document.getElementById('manual-task-priority').value;
         const start_datetime = document.getElementById('manual-task-start').value;
         const end_datetime = document.getElementById('manual-task-end').value;
+        const notify_by_email = document.getElementById('manual-task-notify').checked; // Leer el checkbox
 
         if (!selectedValue) { alert('Selecciona un usuario o grupo.'); return; }
         if (start_datetime && end_datetime && start_datetime >= end_datetime) { alert('La fecha de fin debe ser posterior a la fecha de inicio.'); return; }
 
-        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null };
+        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null, notify_by_email: notify_by_email }; // Añadir al payload
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
         } else {
