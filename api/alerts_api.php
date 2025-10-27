@@ -80,7 +80,7 @@ if ($method === 'POST') {
     $priority = $data['priority'] ?? 'Media'; // Default, puede cambiar
     $start_datetime = !empty($data['start_datetime']) ? $data['start_datetime'] : null;
     $end_datetime = !empty($data['end_datetime']) ? $data['end_datetime'] : null;
-    $notify_by_email = isset($data['notify_by_email']) ? (bool)$data['notify_by_email'] : false;
+    $notify_by_email = true; // Siempre enviar correo para asignaciones/recordatorios
 
     // ... (Validaciones y Lógica Grupal omitidas por brevedad, no tienen cambios) ...
      if ($assign_to_group) {
@@ -149,7 +149,7 @@ if ($method === 'POST') {
                                 <br>
                                 <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
                             ";
-                            send_email_notification($user_data['email'], $user_data['name'], $subject, $body);
+                            send_task_email($user_data['email'], $user_data['name'], $subject, $body);
                         }
                     }
                 }
@@ -271,7 +271,9 @@ if ($method === 'POST') {
                                 <br>
                                 <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
                             ";
-                            send_email_notification($user_data['email'], $user_data['name'], $subject, $body);
+                            if ($notify_by_email) {
+                                send_task_email($user_data['email'], $user_data['name'], $subject, $body);
+                            }
                         }
                     }
                     $stmt_user->close();

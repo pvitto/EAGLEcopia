@@ -686,10 +686,6 @@ $can_complete = $user_can_act && $task_is_active;
                                 <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                      <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                      <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                     <div class="flex items-center pt-2">
-                                        <input type="checkbox" id="reminder-notify-<?php echo $form_id_prefix; ?>" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
-                                        <label for="reminder-notify-<?php echo $form_id_prefix; ?>" class="ml-2 block text-sm text-gray-700">Enviar también por correo</label>
-                                     </div>
                                      <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
                                 </div>
                             </div>
@@ -789,10 +785,6 @@ $can_complete = $user_can_act && $task_is_active;
                                         <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                             <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                             <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                            <div class="flex items-center pt-2">
-                                                <input type="checkbox" id="reminder-notify-<?php echo $form_id_prefix; ?>" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
-                                                <label for="reminder-notify-<?php echo $form_id_prefix; ?>" class="ml-2 block text-sm text-gray-700">Enviar también por correo</label>
-                                            </div>
                                             <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
                                         </div>
                                     </div>
@@ -1469,17 +1461,15 @@ async function completeTask(taskId, formIdPrefix) {
 
     async function setReminder(alertId, taskId, formIdPrefix) {
         const reminderSelect = document.getElementById(`reminder-user-${formIdPrefix}`);
-        const notifyCheckbox = document.getElementById(`reminder-notify-${formIdPrefix}`);
-         if (!reminderSelect || !notifyCheckbox) {
-              console.error("Elementos de formulario de recordatorio no encontrados.");
-              return;
-         }
+        if (!reminderSelect) {
+            console.error("Elementos de formulario de recordatorio no encontrados.");
+            return;
+        }
         const userId = reminderSelect.value;
-        const notify_by_email = notifyCheckbox.checked;
 
         if (!userId) {
-             alert('Por favor, selecciona un usuario para el recordatorio.');
-             return;
+            alert('Por favor, selecciona un usuario para el recordatorio.');
+            return;
         }
 
         await sendTaskRequest({
@@ -1487,7 +1477,7 @@ async function completeTask(taskId, formIdPrefix) {
             type: 'Recordatorio',
             task_id: taskId,
             alert_id: alertId,
-            notify_by_email: notify_by_email // Añadir la opción de notificación
+            notify_by_email: true // Siempre notificar por correo
         });
     }
 
@@ -1572,7 +1562,7 @@ async function handleCheckinSubmit(event) {
         if (!selectedValue) { alert('Selecciona un usuario o grupo.'); return; }
         if (start_datetime && end_datetime && start_datetime >= end_datetime) { alert('La fecha de fin debe ser posterior a la fecha de inicio.'); return; }
 
-        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null };
+        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null, notify_by_email: true };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
         } else {

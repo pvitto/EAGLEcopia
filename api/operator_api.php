@@ -126,7 +126,7 @@ if ($method === 'POST') {
                         <br>
                         <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
                     ";
-                    send_email_notification($user['email'], $user['name'], $subject, $body);
+                    send_task_email($user['email'], $user['name'], $subject, $body);
                 }
             }
         }

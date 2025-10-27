@@ -1,63 +1,48 @@
 <?php
-/**
- * Este archivo contiene la función para enviar correos electrónicos usando PHPMailer.
- */
-
-// Cargar el autoloader de Composer de forma robusta.
+// Incluir el autoloader de Composer
 require_once __DIR__ . '/vendor/autoload.php';
 
-// Importar las clases de PHPMailer al espacio de nombres global.
-// Esto soluciona el error "Undefined type" en el editor y asegura la correcta resolución de clases.
+// Importar las clases de PHPMailer
 use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception as PHPMailerException;
+use PHPMailer\PHPMailer\Exception;
 
-/**
- * Envía un correo electrónico utilizando PHPMailer con una cuenta de Gmail.
- *
- * @param string $toEmail La dirección de correo del destinatario.
- * @param string $toName El nombre del destinatario.
- * @param string $subject El asunto del correo.
- * @param string $body El cuerpo del correo en formato HTML.
- * @return bool Devuelve true si el correo se envió con éxito, false en caso contrario.
- */
-function send_email_notification($toEmail, $toName, $subject, $body) {
-    // Ahora podemos instanciar PHPMailer usando el nombre de clase corto.
+function send_task_email($to_email, $to_name, $subject, $body) {
+    // --- CONFIGURACIÓN DE GMAIL ---
+    // IMPORTANTE: Reemplaza con tus propias credenciales.
+    // Es recomendable usar variables de entorno o un archivo de configuración seguro.
+    $gmail_user = 'TU_CORREO@gmail.com'; // Tu dirección de correo de Gmail
+    $gmail_password = 'TU_CONTRASEÑA_DE_APLICACION'; // Tu contraseña de aplicación de Gmail
+
     $mail = new PHPMailer(true);
 
     try {
-        // --- Configuración del Servidor SMTP ---
-        $mail->SMTPDebug = 0; // 0 = off (producción), 2 = debug
+        // Configuración del servidor
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-
-        // --- CREDENCIALES (Reemplazar con las tuyas en tu entorno local) ---
-        // IMPORTANTE: No guardes credenciales reales en este archivo en el repositorio.
-        $mail->Username = 'TU_CORREO@gmail.com'; // Tu dirección de correo de Gmail
-        $mail->Password = 'TU_CONTRASENA_DE_APLICACION'; // Tu contraseña de aplicación de Gmail
-
+        $mail->Username = $gmail_user;
+        $mail->Password = $gmail_password;
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
 
-        // --- Remitente y Destinatario ---
-        $mail->setFrom('TU_CORREO@gmail.com', 'Sistema de Alertas EAGLE 3.0');
-        $mail->addAddress($toEmail, $toName);
+        // Remitente
+        $mail->setFrom($gmail_user, 'Sistema de Alertas EAGLE 3.0');
 
-        // --- Contenido del Correo ---
+        // Destinatario
+        $mail->addAddress($to_email, $to_name);
+
+        // Contenido del correo
         $mail->isHTML(true);
         $mail->Subject = $subject;
-        $mail->Body = $body;
-        $mail->AltBody = strip_tags($body);
+        $mail->Body    = $body;
+        $mail->AltBody = strip_tags($body); // Versión en texto plano
 
         $mail->send();
-
         return true;
-
-    } catch (PHPMailerException $e) {
-        // Capturamos la excepción específica de PHPMailer para un manejo de errores más preciso.
-        error_log("PHPMailer Error: No se pudo enviar el correo. " . $mail->ErrorInfo);
+    } catch (Exception $e) {
+        // Registrar el error para depuración
+        error_log("Error al enviar correo a {$to_email}: " . $mail->ErrorInfo);
         return false;
     }
 }
-
