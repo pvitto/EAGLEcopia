@@ -1,178 +1,141 @@
 <?php
-// Inicia la sesión de forma segura
-require '../config.php';
 header('Content-Type: application/json');
-
-// 1. Verificación de permisos de Administrador
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Admin') {
-    http_response_code(403); // Forbidden
-    echo json_encode(['success' => false, 'error' => 'Acceso no autorizado.']);
-    exit;
-}
-
 require '../db_connection.php';
+require '../config.php';
+
+// Habilitar el reporte de errores para depuración
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+$response = ['success' => false, 'error' => 'Invalid request'];
+
+if ($conn->connect_error) {
+    $response['error'] = "Connection failed: " . $conn->connect_error;
+    echo json_encode($response);
+    exit();
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-switch ($method) {
-    case 'GET':
-        // Obtener todos los usuarios
-        $users = [];
-        // *** MODIFICADO: Incluir 'gender' en la consulta ***
-        $result = $conn->query("SELECT id, name, email, role, gender FROM users ORDER BY name ASC");
-        if ($result) {
-            while ($row = $result->fetch_assoc()) {
-                $users[] = $row;
-            }
-        }
-        echo json_encode($users);
-        break;
-
-    case 'POST':
-        // Crear o Actualizar un usuario
-        $id = $_POST['id'] ?? null;
-        $name = trim($_POST['name'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+try {
+    if ($method === 'POST') {
+        // Manejar creación y actualización de usuarios
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $name = $_POST['name'] ?? '';
+        $email = $_POST['email'] ?? '';
         $role = $_POST['role'] ?? '';
+        $gender = $_POST['gender'] ?? '';
         $password = $_POST['password'] ?? '';
-        // *** NUEVO: Obtener género ***
-        $gender = $_POST['gender'] ?? null;
 
-        // Validaciones básicas
-        if (empty($name) || empty($email) || empty($role)) {
-             http_response_code(400); // Bad Request
-            echo json_encode(['success' => false, 'error' => 'Nombre, email y rol son requeridos.']);
-            exit;
+        // --- Validación ---
+        if (empty($name) || empty($email) || empty($role) || empty($gender)) {
+            throw new Exception("Todos los campos excepto la contraseña son obligatorios.");
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-             http_response_code(400);
-             echo json_encode(['success' => false, 'error' => 'Formato de email inválido.']);
-             exit;
-        }
-        if (!in_array($role, ['Admin', 'Operador', 'Checkinero', 'Digitador'])) {
-             http_response_code(400);
-             echo json_encode(['success' => false, 'error' => 'Rol inválido.']);
-             exit;
-        }
-        // *** NUEVO: Validar género ***
-        if (!in_array($gender, ['M', 'F'])) {
-             http_response_code(400);
-             echo json_encode(['success' => false, 'error' => 'Sexo inválido. Debe ser M o F.']);
-             exit;
+            throw new Exception("El formato del correo electrónico no es válido.");
         }
 
-
-        try {
-            if ($id) {
-                // Actualizar usuario existente
-                if (!empty($password)) {
-                    // *** MODIFICADO: Incluir 'gender' y contraseña ***
-                    $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ?, password = ? WHERE id = ?");
-                    if (!$stmt) throw new Exception("Error preparando la consulta (update con pass): " . $conn->error);
-                    $stmt->bind_param("sssssi", $name, $email, $role, $gender, $password, $id);
-                } else {
-                    // *** MODIFICADO: Incluir 'gender' sin contraseña ***
-                    $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ? WHERE id = ?");
-                     if (!$stmt) throw new Exception("Error preparando la consulta (update sin pass): " . $conn->error);
-                    $stmt->bind_param("ssssi", $name, $email, $role, $gender, $id);
-                }
+        if ($id > 0) {
+            // --- Actualizar Usuario ---
+            if (!empty($password)) {
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ?, password = ? WHERE id = ?");
+                $stmt->bind_param("sssssi", $name, $email, $role, $gender, $hashed_password, $id);
             } else {
-                // Crear nuevo usuario
-                if (empty($password)) {
-                    http_response_code(400);
-                    echo json_encode(['success' => false, 'error' => 'La contraseña es requerida para nuevos usuarios.']);
-                    exit;
-                }
-                 // *** MODIFICADO: Incluir 'gender' al insertar ***
-                $stmt = $conn->prepare("INSERT INTO users (name, email, role, gender, password) VALUES (?, ?, ?, ?, ?)");
-                 if (!$stmt) throw new Exception("Error preparando la consulta (insert): " . $conn->error);
-                $stmt->bind_param("sssss", $name, $email, $role, $gender, $password);
+                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ? WHERE id = ?");
+                $stmt->bind_param("ssssi", $name, $email, $role, $gender, $id);
             }
-
-            if ($stmt->execute()) {
-                echo json_encode(['success' => true, 'id' => $id ?: $conn->insert_id]);
-            } else {
-                 // Capturar errores específicos como email duplicado
-                 if ($conn->errno == 1062) { // Código de error para entrada duplicada
-                     http_response_code(409); // Conflict
-                     echo json_encode(['success' => false, 'error' => 'El email ya está registrado.']);
-                 } else {
-                     throw new Exception('Error al ejecutar la consulta: ' . $stmt->error);
-                 }
+            $action = "actualizado";
+        } else {
+            // --- Crear Usuario ---
+            if (empty($password)) {
+                throw new Exception("La contraseña es obligatoria para nuevos usuarios.");
             }
-            $stmt->close();
-
-        } catch (Exception $e) {
-            http_response_code(500); // Internal Server Error
-            error_log("Error en users_api.php (POST): " . $e->getMessage()); // Log del error
-            echo json_encode(['success' => false, 'error' => 'Error en la base de datos: ' . $e->getMessage()]);
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $conn->prepare("INSERT INTO users (name, email, role, gender, password) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssss", $name, $email, $role, $gender, $hashed_password);
+            $action = "creado";
         }
 
-        break;
+        if ($stmt->execute()) {
+            $response['success'] = true;
+            $response['message'] = "Usuario {$action} correctamente.";
+            unset($response['error']);
+        } else {
+            if ($conn->errno == 1062) { // Código de error para entrada duplicada
+                throw new Exception("Error: El correo electrónico '{$email}' ya está en uso.");
+            } else {
+                throw new Exception("Error al ejecutar la consulta: " . $stmt->error);
+            }
+        }
+        $stmt->close();
 
-    case 'DELETE':
-        // Eliminar un usuario
-        parse_str(file_get_contents("php://input"), $_DELETE);
-        $id = $_DELETE['id'] ?? ($_GET['id'] ?? null); // Aceptar ID por GET o DELETE body
+    } elseif ($method === 'DELETE') {
+        // Manejar eliminación de usuarios
+        parse_str(file_get_contents("php://input"), $delete_vars);
+        $id = $delete_vars['id'] ?? 0;
 
-        if ($id && filter_var($id, FILTER_VALIDATE_INT)) {
-             if ($id == $_SESSION['user_id']) { // Prevenir autoeliminación
-                 http_response_code(403);
-                 echo json_encode(['success' => false, 'error' => 'No puedes eliminar tu propio usuario.']);
-                 exit;
-             }
-
+        if ($id > 0) {
+            // Para mantener la integridad, podrías reasignar tareas o eliminarlas.
+            // Aquí, por simplicidad, las eliminaremos.
             $conn->begin_transaction();
             try {
-                // Eliminar tareas asignadas al usuario (o reasignarlas si prefieres)
-                 $stmt_tasks = $conn->prepare("DELETE FROM tasks WHERE assigned_to_user_id = ?");
-                 if (!$stmt_tasks) throw new Exception("Error preparando delete tasks: " . $conn->error);
-                 $stmt_tasks->bind_param("i", $id);
-                 $stmt_tasks->execute();
-                 $stmt_tasks->close();
+                // Eliminar recordatorios asociados
+                $stmt_rem = $conn->prepare("DELETE FROM reminders WHERE user_id = ? OR created_by_user_id = ?");
+                $stmt_rem->bind_param("ii", $id, $id);
+                $stmt_rem->execute();
+                $stmt_rem->close();
 
-                 // Eliminar recordatorios para el usuario
-                 $stmt_reminders = $conn->prepare("DELETE FROM reminders WHERE user_id = ?");
-                 if (!$stmt_reminders) throw new Exception("Error preparando delete reminders: " . $conn->error);
-                 $stmt_reminders->bind_param("i", $id);
-                 $stmt_reminders->execute();
-                 $stmt_reminders->close();
+                // Eliminar tareas asociadas
+                $stmt_tasks = $conn->prepare("DELETE FROM tasks WHERE assigned_to_user_id = ? OR created_by_user_id = ?");
+                $stmt_tasks->bind_param("ii", $id, $id);
+                $stmt_tasks->execute();
+                $stmt_tasks->close();
 
-                // Eliminar el usuario
+                // Finalmente, eliminar el usuario
                 $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
-                if (!$stmt) throw new Exception("Error preparando delete user: " . $conn->error);
                 $stmt->bind_param("i", $id);
-
                 if ($stmt->execute()) {
-                     if ($stmt->affected_rows > 0) {
-                         $conn->commit();
-                         echo json_encode(['success' => true, 'message' => 'Usuario y sus tareas/recordatorios asociados eliminados.']);
-                     } else {
-                         throw new Exception('Usuario no encontrado.');
-                     }
+                    $conn->commit();
+                    $response['success'] = true;
+                    $response['message'] = 'Usuario y sus registros asociados eliminados correctamente.';
+                    unset($response['error']);
                 } else {
-                    throw new Exception('Error al eliminar el usuario: ' . $stmt->error);
+                    throw new Exception("Error al eliminar el usuario: " . $stmt->error);
                 }
                 $stmt->close();
 
             } catch (Exception $e) {
                 $conn->rollback();
-                http_response_code(500);
-                error_log("Error en users_api.php (DELETE): " . $e->getMessage()); // Log del error
-                echo json_encode(['success' => false, 'error' => 'Error en la base de datos al eliminar: ' . $e->getMessage()]);
+                throw $e; // Re-lanzar la excepción para el bloque catch principal
             }
-
         } else {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'ID de usuario inválido o no proporcionado.']);
+            throw new Exception("ID de usuario no válido para eliminar.");
         }
-        break;
+    } elseif ($method === 'GET') {
+        // Manejar la obtención de todos los usuarios
+        $result = $conn->query("SELECT id, name, email, role, gender FROM users ORDER BY name ASC");
+        if ($result) {
+            $users = [];
+            while ($row = $result->fetch_assoc()) {
+                $users[] = $row;
+            }
+            $response['success'] = true;
+            $response['users'] = $users;
+            unset($response['error']);
+        } else {
+            throw new Exception("Error al obtener los usuarios: " . $conn->error);
+        }
+    } else {
+        throw new Exception("Método no permitido.");
+    }
 
-    default:
-        header('HTTP/1.0 405 Method Not Allowed');
-        echo json_encode(['success' => false, 'error' => 'Método no soportado.']);
-        break;
+} catch (Exception $e) {
+    http_response_code(400); // Bad Request
+    $response['success'] = false;
+    $response['error'] = $e->getMessage();
 }
 
 $conn->close();
-?>
+echo json_encode($response);

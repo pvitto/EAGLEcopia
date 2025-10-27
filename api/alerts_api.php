@@ -97,8 +97,69 @@ if ($method === 'POST') {
     $is_update = false;
 
     if ($type === 'Recordatorio') {
-        // ... (el código de Recordatorio no se modifica y se omite por brevedad) ...
+        if (!$user_id || !$task_id) {
+            throw new Exception("Faltan datos para crear el recordatorio.");
+        }
+
+        // 1. Obtener el título de la tarea/alerta para el mensaje
+        $title_query = "SELECT COALESCE(a.title, t.title) as title FROM tasks t LEFT JOIN alerts a ON t.alert_id = a.id WHERE t.id = ?";
+        $stmt_title = $conn->prepare($title_query);
+        $task_title = "Tarea ID " . $task_id; // Fallback title
+        if ($stmt_title) {
+            $stmt_title->bind_param("i", $task_id);
+            if ($stmt_title->execute()) {
+                $res = $stmt_title->get_result();
+                if ($row = $res->fetch_assoc()) {
+                    $task_title = $row['title'];
+                }
+            }
+            $stmt_title->close();
+        }
+
+        $message = "Recordatorio sobre la tarea: '" . $conn->real_escape_string($task_title) . "'.";
+
+        // 2. Insertar el recordatorio en la base de datos
+        $stmt_reminder = $conn->prepare("INSERT INTO reminders (user_id, message, created_by_user_id) VALUES (?, ?, ?)");
+        if (!$stmt_reminder) {
+            throw new Exception("Error al preparar la consulta del recordatorio: " . $conn->error);
+        }
+        $stmt_reminder->bind_param("isi", $user_id, $message, $creator_id);
+
+        if (!$stmt_reminder->execute()) {
+            throw new Exception("Error al guardar el recordatorio: " . $stmt_reminder->error);
+        }
+        $stmt_reminder->close();
+
+        // 3. Lógica de envío de correo electrónico si está marcado
+        if ($notify_by_email) {
+            $stmt_user = $conn->prepare("SELECT name, email FROM users WHERE id = ?");
+            if ($stmt_user) {
+                $stmt_user->bind_param("i", $user_id);
+                if ($stmt_user->execute()) {
+                    $result_user = $stmt_user->get_result();
+                    if ($user_data = $result_user->fetch_assoc()) {
+                        if (!empty($user_data['email'])) {
+                            $subject = "[EAGLE 3.0] Tienes un recordatorio";
+                            $body = "
+                                <h1>Hola " . htmlspecialchars($user_data['name']) . ",</h1>
+                                <p>El usuario <strong>" . htmlspecialchars($creator_name) . "</strong> te ha enviado un recordatorio en el sistema EAGLE 3.0.</p>
+                                <hr>
+                                <p><strong>Mensaje:</strong> " . htmlspecialchars($message) . "</p>
+                                <p>Por favor, ingresa a la plataforma para ver los detalles completos.</p>
+                                <br>
+                                <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                            ";
+                            send_email_notification($user_data['email'], $user_data['name'], $subject, $body);
+                        }
+                    }
+                }
+                $stmt_user->close();
+            }
+        }
+
         echo json_encode(['success' => true, 'message' => 'Recordatorio creado.']);
+        $conn->close();
+        exit(); // Salir del script después de manejar el recordatorio
 
     } elseif ($type === 'Asignacion') {
         if ($task_id) { // Re-asignar Tarea existente

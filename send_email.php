@@ -26,12 +26,13 @@ function send_email_notification($toEmail, $toName, $subject, $body) {
 
     try {
         // --- Configuración del Servidor SMTP ---
-        $mail->SMTPDebug = 0; // 0 = off (producción)
+        $mail->SMTPDebug = 0; // 0 = off (producción), 2 = debug
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
 
-        // --- CREDENCIALES (Reemplazar con las tuyas) ---
+        // --- CREDENCIALES (Reemplazar con las tuyas en tu entorno local) ---
+        // IMPORTANTE: No guardes credenciales reales en este archivo en el repositorio.
         $mail->Username = 'TU_CORREO@gmail.com'; // Tu dirección de correo de Gmail
         $mail->Password = 'TU_CONTRASENA_DE_APLICACION'; // Tu contraseña de aplicación de Gmail
 
