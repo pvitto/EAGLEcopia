@@ -1,7 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php';
-require_once '../send_email.php'; // Incluir la nueva utilidad de correo
+// require_once '../send_email.php'; // Temporalmente comentado para depuración del GET
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Operador'])) {
