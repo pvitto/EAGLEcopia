@@ -60,3 +60,4 @@ function send_email_notification($toEmail, $toName, $subject, $body) {
         return false;
     }
 }
+
