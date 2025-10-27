@@ -1,7 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php'; // Asegúrate que esta ruta sea correcta
-// require_once '../send_email.php'; // Comentado temporalmente para diagnóstico
+require_once '../send_email.php'; // Incluir la nueva utilidad de correo
 header('Content-Type: application/json');
 
 // Verificar que el usuario ha iniciado sesión

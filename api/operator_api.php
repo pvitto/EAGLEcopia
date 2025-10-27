@@ -1,7 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php';
-// require_once '../send_email.php'; // Comentado temporalmente para diagnóstico
+require_once '../send_email.php';
 header('Content-Type: application/json');
 
 // Session and permission check
@@ -76,11 +76,16 @@ if ($method === 'POST') {
         $stmt_update->close();
 
         if ($discrepancy != 0) {
+            // --- CONSULTA CORREGIDA ---
+            // Obtenemos los detalles necesarios para la alerta y el correo.
+            // El 'operator_name' se obtiene del usuario que está logueado, que es quien guarda el conteo.
             $stmt_details = $conn->prepare("
-                SELECT ci.invoice_number, c.name as client_name, u.name as operator_name
+                SELECT
+                    ci.invoice_number,
+                    c.name as client_name,
+                    (SELECT name FROM users WHERE id = ?) as operator_name
                 FROM check_ins ci
                 JOIN clients c ON ci.client_id = c.id
-                JOIN users u ON u.id = ?
                 WHERE ci.id = ?
             ");
             $stmt_details->bind_param("ii", $user_id, $check_in_id);
@@ -110,8 +115,6 @@ if ($method === 'POST') {
 
                 $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
 
-                // -- INICIO: Bloque de correo temporalmente comentado para diagnóstico --
-                /*
                 foreach ($users_to_notify as $user) {
                     $body = "
                         <h1>Alerta de Discrepancia</h1>
@@ -130,8 +133,6 @@ if ($method === 'POST') {
                     ";
                     send_task_email($user['email'], $user['name'], $subject, $body);
                 }
-                */
-                // -- FIN: Bloque de correo temporalmente comentado --
             }
         }
         
