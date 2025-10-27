@@ -1,6 +1,8 @@
 <?php
+<?php
 require '../config.php';
 require '../db_connection.php';
+require_once '../send_email.php'; // Incluir la nueva utilidad de correo
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Operador'])) {
@@ -64,8 +66,22 @@ if ($method === 'POST') {
         // Generar alerta solo si hay discrepancia
         if ($data['discrepancy'] != 0) {
             $check_in_id = $data['check_in_id'];
-            $res = $conn->query("SELECT invoice_number FROM check_ins WHERE id = $check_in_id");
-            $invoice_number = $res->fetch_assoc()['invoice_number'];
+            // --- OBTENER MÁS DATOS PARA EL CORREO ---
+            $stmt_details = $conn->prepare("
+                SELECT ci.invoice_number, c.name as client_name, u.name as operator_name
+                FROM check_ins ci
+                JOIN clients c ON ci.client_id = c.id
+                JOIN users u ON u.id = ?
+                WHERE ci.id = ?
+            ");
+            $stmt_details->bind_param("ii", $user_id, $check_in_id);
+            $stmt_details->execute();
+            $details_result = $stmt_details->get_result()->fetch_assoc();
+            $stmt_details->close();
+
+            $invoice_number = $details_result['invoice_number'] ?? 'N/A';
+            $client_name = $details_result['client_name'] ?? 'N/A';
+            $operator_name = $details_result['operator_name'] ?? 'N/A';
             $discrepancy_formatted = number_format($data['discrepancy'], 0, ',', '.');
             
             $alert_title = "Discrepancia en Planilla: " . $invoice_number;
@@ -73,29 +89,47 @@ if ($method === 'POST') {
             
             $stmt_alert = $conn->prepare("INSERT INTO alerts (title, description, priority, status, suggested_role, check_in_id) VALUES (?, ?, 'Critica', 'Pendiente', 'Digitador', ?)");
             $stmt_alert->bind_param("ssi", $alert_title, $alert_desc, $check_in_id);
-        // --- NUEVO CÓDIGO MEJORADO ---
             $stmt_alert->execute();
             $alert_id = $stmt_alert->insert_id;
             $stmt_alert->close();
 
-            // Asignar UNA tarea al GRUPO 'Digitador'
             if ($alert_id) {
                 $instruction = "Realizar seguimiento a la discrepancia (" . $invoice_number . "), contactar a los responsables y documentar la resolución.";
-                
-                // Preparamos la inserción de la tarea asignada al grupo
                 $stmt_task = $conn->prepare("INSERT INTO tasks (alert_id, assigned_to_group, instruction, type, status, priority, created_by_user_id) VALUES (?, 'Digitador', ?, 'Asignacion', 'Pendiente', 'Critica', ?)");
-                
-                // El created_by_user_id es el Operador que generó la discrepancia
-                $operator_user_id = $_SESSION['user_id']; 
-                
-                $stmt_task->bind_param("isi", $alert_id, $instruction, $operator_user_id);
+                $stmt_task->bind_param("isi", $alert_id, $instruction, $user_id);
                 $stmt_task->execute();
                 $stmt_task->close();
-                
-                // Actualizamos el estado de la alerta
                 $conn->query("UPDATE alerts SET status = 'Asignada' WHERE id = $alert_id");
+
+                // --- NUEVO: LÓGICA DE NOTIFICACIÓN POR CORREO ---
+                $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
+                $stmt_users->execute();
+                $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
+                $stmt_users->close();
+
+                $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
+
+                foreach ($users_to_notify as $user) {
+                    $body = "
+                        <h1>Alerta de Discrepancia</h1>
+                        <p>Hola " . htmlspecialchars($user['name']) . ",</p>
+                        <p>Se ha detectado una discrepancia en el conteo de una planilla que requiere tu atención inmediata.</p>
+                        <hr>
+                        <ul>
+                            <li><strong>Planilla Nro:</strong> " . htmlspecialchars($invoice_number) . "</li>
+                            <li><strong>Cliente:</strong> " . htmlspecialchars($client_name) . "</li>
+                            <li><strong>Operador:</strong> " . htmlspecialchars($operator_name) . "</li>
+                            <li><strong>Monto de la Discrepancia:</strong> $" . htmlspecialchars($discrepancy_formatted) . "</li>
+                        </ul>
+                        <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles y tomar las acciones correspondientes.</p>
+                        <br>
+                        <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                    ";
+                    // Se asume que la función send_email_notification ya maneja los errores internamente (error_log)
+                    send_email_notification($user['email'], $user['name'], $subject, $body);
+                }
+                // --- FIN DE LA LÓGICA DE CORREO ---
             }
-// --- FIN DEL NUEVO CÓDIGO ---
         }
         
         $conn->commit();
