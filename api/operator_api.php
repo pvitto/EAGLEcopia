@@ -110,6 +110,8 @@ if ($method === 'POST') {
 
                 $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
 
+                // -- INICIO: Bloque de correo temporalmente comentado para diagnóstico --
+                /*
                 foreach ($users_to_notify as $user) {
                     $body = "
                         <h1>Alerta de Discrepancia</h1>
@@ -128,6 +130,8 @@ if ($method === 'POST') {
                     ";
                     send_task_email($user['email'], $user['name'], $subject, $body);
                 }
+                */
+                // -- FIN: Bloque de correo temporalmente comentado --
             }
         }
         

@@ -1445,7 +1445,7 @@ async function completeTask(taskId, formIdPrefix) {
 
         let payload = {
             instruction: instruction,
-            type: alertId ? 'Asignacion' : 'Manual', // La API espera 'Manual' para reasignaciones sin alerta
+            type: 'Asignacion', // Siempre es 'Asignacion' al (re)asignar desde la interfaz de tareas
             task_id: taskId,
             alert_id: alertId
         };

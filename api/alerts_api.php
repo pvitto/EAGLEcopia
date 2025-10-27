@@ -162,9 +162,11 @@ if ($method === 'POST') {
         exit(); // Salir del script después de manejar el recordatorio
 
     } elseif ($type === 'Asignacion') {
-        if ($task_id) { // Re-asignar Tarea existente
+        // --- LÓGICA CORREGIDA ---
+        // Si se provee un task_id, SIEMPRE es una actualización (reasignación).
+        // Si no, es una nueva tarea creada a partir de una alerta.
+        if ($task_id) {
             $is_update = true;
-            // 1. Obtener la prioridad original de la tarea para no perderla
             $stmt_get_prio = $conn->prepare("SELECT priority FROM tasks WHERE id = ?");
             $original_priority = 'Media';
             if ($stmt_get_prio) {
@@ -177,16 +179,12 @@ if ($method === 'POST') {
                 }
                 $stmt_get_prio->close();
             }
-            // 2. Decidir la prioridad final: la nueva si existe, si no, la original
             $priority = !empty($data['priority']) ? $data['priority'] : $original_priority;
-
-            // 3. Actualizar solo los campos necesarios (sin tocar status ni created_at)
             $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, priority = ?, assigned_to_group = NULL WHERE id = ?");
             if ($stmt) {
                 $stmt->bind_param("issi", $user_id, $instruction, $priority, $task_id);
             }
-
-        } elseif ($alert_id) { // Crear nueva Tarea desde Alerta
+        } elseif ($alert_id) { // Crear nueva Tarea desde Alerta (sin task_id)
             // 1. Obtener la prioridad de la alerta original
             $prio_res = $conn->query("SELECT priority FROM alerts WHERE id = " . intval($alert_id));
             $original_priority = $prio_res ? ($prio_res->fetch_assoc()['priority'] ?? 'Media') : 'Media';
