@@ -1,5 +1,4 @@
 <?php
-<?php
 require '../config.php';
 require '../db_connection.php';
 require_once '../send_email.php'; // Incluir la nueva utilidad de correo

@@ -311,14 +311,14 @@ if ($method === 'POST') {
 
             $stmt = $conn->prepare("INSERT INTO tasks (alert_id, assigned_to_user_id, instruction, type, status, priority, created_by_user_id, created_at) VALUES (?, ?, ?, 'Asignacion', 'Pendiente', ?, ?, NOW())");
              if ($stmt) {
-                 $stmt->bind_param("iissis", $alert_id, $user_id, $instruction, $final_priority, $creator_id);
+                 $stmt->bind_param("iissi", $alert_id, $user_id, $instruction, $final_priority, $creator_id);
              }
         }
     } elseif ($type === 'Manual') {
         if ($title) {
              $stmt = $conn->prepare("INSERT INTO tasks (title, instruction, priority, assigned_to_user_id, type, start_datetime, end_datetime, created_by_user_id) VALUES (?, ?, ?, ?, 'Manual', ?, ?, ?)");
              if ($stmt) {
-                 $stmt->bind_param("sssissii", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
+                 $stmt->bind_param("sssissi", $title, $instruction, $priority, $user_id, $start_datetime, $end_datetime, $creator_id);
              }
         } else {
              http_response_code(400);

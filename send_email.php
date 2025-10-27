@@ -40,8 +40,8 @@ function send_email_notification($toEmail, $toName, $subject, $body) {
         // --- TUS CREDENCIALES DE GMAIL (¡NO LAS PONGAS DIRECTAMENTE AQUÍ!) ---
         // Se recomienda usar variables de entorno o un archivo de configuración seguro.
         // Reemplaza los valores de abajo con tus credenciales.
-        $mail->Username = 'mancinivillalobos.paolo@gmail.com';           // tu correo Gmail
-$mail->Password = 'bgjvrntncsjapnam'; 
+        $mail->Username = 'TU_CORREO@gmail.com'; // Tu dirección de correo de Gmail
+        $mail->Password = 'TU_CONTRASENA_DE_APLICACION'; // Tu contraseña de aplicación de Gmail
 
         // Habilitar cifrado TLS implícito
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
@@ -52,7 +52,7 @@ $mail->Password = 'bgjvrntncsjapnam';
         // --- Remitente y Destinatario ---
 
         // Quién envía el correo
-        $mail->setFrom('mancinivillalobos.paolo@gmail.com', 'Sistema de Alertas EAGLE 3.0');
+        $mail->setFrom('TU_CORREO@gmail.com', 'Sistema de Alertas EAGLE 3.0');
 
         // A quién se envía el correo
         $mail->addAddress($toEmail, $toName);
