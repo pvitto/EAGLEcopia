@@ -75,67 +75,97 @@ if ($method === 'POST') {
         $stmt_update->execute();
         $stmt_update->close();
 
-        if ($discrepancy != 0) {
-            // --- CONSULTA CORREGIDA ---
-            // Obtenemos los detalles necesarios para la alerta y el correo.
-            // El 'operator_name' se obtiene del usuario que está logueado, que es quien guarda el conteo.
-            $stmt_details = $conn->prepare("
-                SELECT
-                    ci.invoice_number,
-                    c.name as client_name,
-                    (SELECT name FROM users WHERE id = ?) as operator_name
-                FROM check_ins ci
-                JOIN clients c ON ci.client_id = c.id
-                WHERE ci.id = ?
-            ");
-            $stmt_details->bind_param("ii", $user_id, $check_in_id);
-            $stmt_details->execute();
-            $details_result = $stmt_details->get_result()->fetch_assoc();
-            $stmt_details->close();
+        // --- 1. Obtener detalles para la notificación ---
+        $stmt_details = $conn->prepare("
+            SELECT
+                ci.invoice_number,
+                c.name as client_name,
+                (SELECT name FROM users WHERE id = ?) as operator_name
+            FROM check_ins ci
+            JOIN clients c ON ci.client_id = c.id
+            WHERE ci.id = ?
+        ");
+        $stmt_details->bind_param("ii", $user_id, $check_in_id);
+        $stmt_details->execute();
+        $details_result = $stmt_details->get_result()->fetch_assoc();
+        $stmt_details->close();
 
-            $invoice_number = $details_result['invoice_number'] ?? 'N/A';
-            $client_name = $details_result['client_name'] ?? 'N/A';
-            $operator_name = $details_result['operator_name'] ?? 'N/A';
+        $invoice_number = $details_result['invoice_number'] ?? 'N/A';
+        $client_name = $details_result['client_name'] ?? 'N/A';
+        $operator_name = $details_result['operator_name'] ?? 'N/A';
+
+        // --- 2. Crear alerta en la interfaz (solo si hay discrepancia) ---
+        if ($discrepancy != 0) {
             $discrepancy_formatted = number_format($discrepancy, 0, ',', '.');
-            
             $alert_title = "Discrepancia en Planilla: " . $invoice_number;
             $alert_desc = "Diferencia de $" . $discrepancy_formatted . ". Requiere revisión.";
             
             $stmt_alert = $conn->prepare("INSERT INTO alerts (title, description, priority, status, suggested_role, check_in_id) VALUES (?, ?, 'Critica', 'Pendiente', 'Digitador', ?)");
             $stmt_alert->bind_param("ssi", $alert_title, $alert_desc, $check_in_id);
             $stmt_alert->execute();
-            $alert_id = $stmt_alert->insert_id;
             $stmt_alert->close();
+        }
 
-            if ($alert_id) {
-                $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
-                $stmt_users->execute();
-                $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
-                $stmt_users->close();
+        // --- 3. Enviar notificación por correo (siempre) ---
+        $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
+        $stmt_users->execute();
+        $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt_users->close();
 
+        if (!empty($users_to_notify)) {
+            $subject = "";
+            $body_template = "";
+
+            if ($discrepancy != 0) {
+                $discrepancy_formatted = number_format($discrepancy, 0, ',', '.');
                 $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
+                $body_template = "
+                    <h1>Alerta de Discrepancia</h1>
+                    <p>Hola %s,</p>
+                    <p>Se ha detectado una discrepancia monetaria que requiere atención inmediata.</p>
+                    <hr>
+                    <ul>
+                        <li><strong>Planilla Nro:</strong> %s</li>
+                        <li><strong>Cliente:</strong> %s</li>
+                        <li><strong>Operador:</strong> %s</li>
+                        <li><strong>Monto de la Discrepancia:</strong> $%s</li>
+                    </ul>
+                    <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles.</p>
+                ";
+            } else {
+                $subject = "[INFO] Planilla " . $invoice_number . " Procesada Correctamente";
+                $body_template = "
+                    <h1>Notificación de Procesamiento</h1>
+                    <p>Hola %s,</p>
+                    <p>Te informamos que la planilla <strong>%s</strong> ha sido procesada exitosamente sin diferencias.</p>
+                    <hr>
+                    <ul>
+                        <li><strong>Cliente:</strong> %s</li>
+                        <li><strong>Operador:</strong> %s</li>
+                        <li><strong>Resultado:</strong> Procesado sin discrepancias.</li>
+                    </ul>
+                    <p>No se requiere ninguna acción.</p>
+                ";
+            }
 
-                foreach ($users_to_notify as $user) {
-                    $body = "
-                        <h1>Alerta de Discrepancia</h1>
-                        <p>Hola " . htmlspecialchars($user['name']) . ",</p>
-                        <p>Se ha detectado una discrepancia monetaria que requiere tu atención inmediata.</p>
-                        <hr>
-                        <ul>
-                            <li><strong>Planilla Nro:</strong> " . htmlspecialchars($invoice_number) . "</li>
-                            <li><strong>Cliente:</strong> " . htmlspecialchars($client_name) . "</li>
-                            <li><strong>Operador:</strong> " . htmlspecialchars($operator_name) . "</li>
-                            <li><strong>Monto de la Discrepancia:</strong> $" . htmlspecialchars($discrepancy_formatted) . "</li>
-                        </ul>
-                        <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles.</p>
-                        <br>
-                        <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
-                    ";
-                    send_task_email($user['email'], $user['name'], $subject, $body);
-                }
+            foreach ($users_to_notify as $user) {
+                $user_name = htmlspecialchars($user['name']);
+                $inv_num_safe = htmlspecialchars($invoice_number);
+                $client_name_safe = htmlspecialchars($client_name);
+                $operator_name_safe = htmlspecialchars($operator_name);
+
+                $final_body = "<div style='font-family: sans-serif;'>" .
+                              (
+                                $discrepancy != 0
+                                ? sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe, htmlspecialchars($discrepancy_formatted))
+                                : sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe)
+                              ) .
+                              "<br><p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p></div>";
+
+                send_task_email($user['email'], $user_name, $subject, $final_body);
             }
         }
-        
+
         $conn->commit();
         echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente.']);
 
