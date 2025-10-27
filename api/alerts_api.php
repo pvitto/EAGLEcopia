@@ -87,7 +87,8 @@ if ($method === 'POST') {
     $priority = $data['priority'] ?? 'Media';
     $start_datetime = !empty($data['start_datetime']) ? $data['start_datetime'] : null; // Podría necesitar validación de formato
     $end_datetime = !empty($data['end_datetime']) ? $data['end_datetime'] : null; // Podría necesitar validación de formato
-    $notify_by_email = isset($data['notify_by_email']) ? (bool)$data['notify_by_email'] : false; // Nuevo parámetro
+    // El parámetro notify_by_email se elimina de aquí, se asume true para asignaciones.
+    $notify_by_email = isset($data['notify_by_email']) ? (bool)$data['notify_by_email'] : false; // Se mantiene solo para recordatorios
 
     // Validaciones
     if ($type !== 'Recordatorio' && $user_id === null && $assign_to_group === null) {
@@ -172,8 +173,8 @@ if ($method === 'POST') {
                     error_log("Error insertando tarea grupal para user ID $uid: " . $stmt_task->error . " | Alert ID: " . ($alert_id ?? 'N/A') . " | Group: " . $assign_to_group);
                 }
 
-                // --- NUEVO: Enviar correo si se solicitó ---
-                if ($notify_by_email && !empty($user_row['email'])) {
+                // --- AUTOMÁTICO: Enviar correo siempre en asignación grupal ---
+                if (!empty($user_row['email'])) {
                     $email_title = $title ?: 'Nueva Tarea/Alerta Asignada';
                     $subject = "[EAGLE 3.0] Tarea Grupal Asignada: " . $email_title;
                     $body = "
@@ -261,7 +262,33 @@ if ($method === 'POST') {
         $message = "Recordatorio sobre: '" . $conn->real_escape_string($taskTitle) . "'";
         $stmt = $conn->prepare("INSERT INTO reminders (user_id, message, created_by_user_id, created_at) VALUES (?, ?, ?, NOW())");
         if ($stmt) {
-              $stmt->bind_param("isi", $target_user_id, $message, $creator_id);
+            $stmt->bind_param("isi", $target_user_id, $message, $creator_id);
+            // --- NUEVO: Enviar correo para recordatorio si se solicita ---
+            if ($notify_by_email && $stmt->execute()) { // Se ejecuta aquí para asegurar que el recordatorio se creó
+                $stmt_user = $conn->prepare("SELECT name, email FROM users WHERE id = ?");
+                if ($stmt_user) {
+                    $stmt_user->bind_param("i", $target_user_id);
+                    $stmt_user->execute();
+                    $result_user = $stmt_user->get_result();
+                    if ($user_data = $result_user->fetch_assoc()) {
+                        if (!empty($user_data['email'])) {
+                            $subject = "[Recordatorio EAGLE 3.0] Tienes un nuevo recordatorio";
+                            $body = "
+                                <h1>Hola " . htmlspecialchars($user_data['name']) . ",</h1>
+                                <p>El usuario " . htmlspecialchars($_SESSION['user_name']) . " te ha enviado un recordatorio a través del sistema EAGLE 3.0.</p>
+                                <hr>
+                                <p><strong>Mensaje:</strong> " . htmlspecialchars($message) . "</p>
+                                <p>Por favor, ingresa a la plataforma para ver los detalles completos.</p>
+                                <br>
+                                <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
+                            ";
+                            send_email_notification($user_data['email'], $user_data['name'], $subject, $body);
+                        }
+                    }
+                    $stmt_user->close();
+                }
+            }
+            // --- FIN NUEVO ---
         } else {
              http_response_code(500);
              error_log("Error preparando INSERT de recordatorio: " . $conn->error);
@@ -312,8 +339,8 @@ if ($method === 'POST') {
                  }
             }
 
-            // --- NUEVO: Enviar correo si se solicitó para asignación individual/manual ---
-            if ($notify_by_email && $user_id && $type !== 'Recordatorio') {
+            // --- AUTOMÁTICO: Enviar correo siempre en asignación individual/manual ---
+            if ($user_id && $type !== 'Recordatorio') {
                 $stmt_user = $conn->prepare("SELECT name, email FROM users WHERE id = ?");
                 if ($stmt_user) {
                     $stmt_user->bind_param("i", $user_id);
@@ -340,7 +367,7 @@ if ($method === 'POST') {
                     $stmt_user->close();
                 }
             }
-            // --- FIN NUEVO ---
+            // --- FIN AUTOMÁTICO ---
 
             $message = ($type === 'Recordatorio') ? 'Recordatorio creado.' : ($is_update ? 'Tarea reasignada.' : 'Tarea asignada.');
             echo json_encode(['success' => true, 'message' => $message]);
