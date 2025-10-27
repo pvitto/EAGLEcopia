@@ -299,11 +299,31 @@ if ($method === 'POST') {
 
     } elseif ($type === 'Asignacion') {
         if ($task_id) { // Re-asignar
-            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, status = 'Pendiente', priority = ?, start_datetime = ?, end_datetime = ?, created_at = NOW() WHERE id = ?");
-             if ($stmt) {
-                 $stmt->bind_param("issssi", $user_id, $instruction, $priority, $start_datetime, $end_datetime, $task_id);
-             }
-             $is_update = true;
+            // --- CORRECCIÓN: PRESERVAR DATOS ORIGINALES ---
+            // 1. Obtener la prioridad original de la tarea
+            $stmt_get_prio = $conn->prepare("SELECT priority FROM tasks WHERE id = ?");
+            $original_priority = 'Media'; // Default
+            if ($stmt_get_prio) {
+                $stmt_get_prio->bind_param("i", $task_id);
+                if ($stmt_get_prio->execute()) {
+                    $result_prio = $stmt_get_prio->get_result();
+                    if ($prio_data = $result_prio->fetch_assoc()) {
+                        $original_priority = $prio_data['priority'];
+                    }
+                }
+                $stmt_get_prio->close();
+            }
+            // Usar la nueva prioridad si se especifica, si no, mantener la original
+            $final_priority = !empty($priority) ? $priority : $original_priority;
+
+            // 2. Actualizar solo los campos necesarios, sin cambiar status ni created_at
+            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, priority = ?, assigned_to_group = NULL WHERE id = ?");
+            if ($stmt) {
+                // El bind_param debe coincidir con los '?' -> i, s, s, i
+                $stmt->bind_param("issi", $user_id, $instruction, $final_priority, $task_id);
+            }
+            $is_update = true;
+            // --- FIN DE LA CORRECCIÓN ---
         } elseif ($alert_id) { // Crear nueva tarea desde alerta
              $prio_res = $conn->query("SELECT priority FROM alerts WHERE id = " . intval($alert_id));
              $original_priority = $prio_res ? ($prio_res->fetch_assoc()['priority'] ?? 'Media') : 'Media';
