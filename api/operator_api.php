@@ -1,7 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php';
-require_once '../send_email.php';
+// require_once '../send_email.php'; // Comentado temporalmente para diagnóstico
 header('Content-Type: application/json');
 
 // Session and permission check
