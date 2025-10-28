@@ -7,7 +7,7 @@ require 'db_connection.php'; // This should define $conn and connection details
 
 // --- Cargar datos iniciales ---
 $all_users = [];
-$users_result = $conn->query("SELECT id, name, role, email, gender FROM users ORDER BY name ASC");
+$users_result = $conn->query("SELECT id, name, role, email, gender, whatsapp FROM users ORDER BY name ASC");
 if ($users_result) { while ($row = $users_result->fetch_assoc()) { $all_users[] = $row; } }
 $admin_users_list = ($_SESSION['user_role'] === 'Admin') ? $all_users : [];
 
@@ -470,6 +470,7 @@ $conn->close();
                     <input type="hidden" id="user-id" name="id">
                     <div><label for="user-name" class="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label><input type="text" id="user-name" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
                     <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                    <div><label for="user-whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label><input type="text" id="user-whatsapp" name="whatsapp" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label for="user-role" class="block text-sm font-medium text-gray-700 mb-1">Rol</label><select id="user-role" name="role" class="w-full px-3 py-2 border border-gray-300 rounded-md" required><option value="Operador">Operador</option><option value="Checkinero">Checkinero</option><option value="Digitador">Digitador</option><option value="Admin">Admin</option></select></div>
                     <div>
                         <label for="user-gender" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
@@ -1023,7 +1024,7 @@ $can_complete = $user_can_act && $task_is_active;
             </div>
 
             <?php if ($_SESSION['user_role'] === 'Admin'): ?>
-            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
+            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">WhatsApp</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
             <div id="content-trazabilidad" class="hidden"><h2 class="text-xl font-bold text-gray-900 mb-4">Trazabilidad de Tareas Completadas</h2><div class="bg-white p-4 rounded-xl shadow-sm mb-6"><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4"><div><label for="filter-start-date" class="text-sm">F. Inicio</label><input type="date" id="filter-start-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-end-date" class="text-sm">F. Fin</label><input type="date" id="filter-end-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-user" class="text-sm">Asignado a</label><select id="filter-user" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-checker" class="text-sm">Check por</label><select id="filter-checker" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-priority" class="text-sm">P. Final</label><select id="filter-priority" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option></select></div><div class="flex items-end space-x-2"><button onclick="applyTrazabilidadFilters()" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md">Filtrar</button><button onclick="exportToExcel()" class="w-full bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Excel</button></div></div></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><div class="overflow-x-auto"><table id="trazabilidad-table" class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Tarea</th><th class="px-6 py-3">Desc.</th><th class="px-6 py-3">P. Ini.</th><th class="px-6 py-3">P. Fin.</th><th class="px-6 py-3 sortable" data-column-name="created_at" onclick="sortTableByDate('created_at')">H. Inicio <span></span></th><th class="px-6 py-3 sortable" data-column-name="completed_at" onclick="sortTableByDate('completed_at')">H. Fin <span></span></th><th class="px-6 py-3">T. Resp.</th><th class="px-6 py-3">Asig. a</th><th class="px-6 py-3">Asig. por</th><th class="px-6 py-3">Check por</th><th class="px-6 py-3">Obs. Cierre</th><th class="px-6 py-3">Acciones</th></tr></thead><tbody id="trazabilidad-tbody"></tbody></table></div></div></div>
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-routes" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
@@ -2021,6 +2022,7 @@ async function handleCheckinSubmit(event) {
             userIdInput.value = user.id;
             document.getElementById('user-name').value = user.name;
             document.getElementById('user-email').value = user.email;
+            document.getElementById('user-whatsapp').value = user.whatsapp || '';
             document.getElementById('user-role').value = user.role;
             document.getElementById('user-gender').value = user.gender || ''; // Usar '' si es null
             userPasswordInput.required = false;
@@ -2042,7 +2044,7 @@ async function handleCheckinSubmit(event) {
         }
         tbody.innerHTML = '';
         if (!users || users.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 5
+             tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 6
              return;
         }
         users.forEach(user => {
@@ -2054,6 +2056,7 @@ async function handleCheckinSubmit(event) {
                 id: user.id,
                 name: user.name || '',
                 email: user.email || '',
+                whatsapp: user.whatsapp || '',
                 role: user.role || '',
                 gender: user.gender || ''
             };
@@ -2063,6 +2066,7 @@ async function handleCheckinSubmit(event) {
                 <tr id="user-row-${safeUser.id}">
                     <td class="px-6 py-4">${safeUser.name}</td>
                     <td class="px-6 py-4">${safeUser.email}</td>
+                    <td class="px-6 py-4">${safeUser.whatsapp}</td>
                     <td class="px-6 py-4"><span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">${displayRole}</span></td>
                     <td class="px-6 py-4 text-center">${safeUser.gender || 'N/A'}</td> <td class="px-6 py-4 text-center">
                         <button onclick='openModal(${userJson})' class="font-medium text-blue-600 hover:text-blue-800">Editar</button>
