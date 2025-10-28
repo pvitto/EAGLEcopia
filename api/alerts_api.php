@@ -165,24 +165,30 @@ if ($method === 'POST') {
         // --- LÓGICA CORREGIDA ---
         // Si se provee un task_id, SIEMPRE es una actualización (reasignación).
         // Si no, es una nueva tarea creada a partir de una alerta.
-        if ($task_id) {
+        if ($task_id) { // Es una REASIGNACIÓN
             $is_update = true;
-            $stmt_get_prio = $conn->prepare("SELECT priority FROM tasks WHERE id = ?");
-            $original_priority = 'Media';
-            if ($stmt_get_prio) {
-                $stmt_get_prio->bind_param("i", $task_id);
-                if ($stmt_get_prio->execute()) {
-                    $result_prio = $stmt_get_prio->get_result();
-                    if ($prio_data = $result_prio->fetch_assoc()) {
-                        $original_priority = $prio_data['priority'];
+
+            // 1. Obtener datos clave (prioridad y fecha) de la BD para preservarlos.
+            $stmt_get_task_data = $conn->prepare("SELECT priority, created_at FROM tasks WHERE id = ?");
+            $original_created_at = null; // Fallback
+            if ($stmt_get_task_data) {
+                $stmt_get_task_data->bind_param("i", $task_id);
+                if ($stmt_get_task_data->execute()) {
+                    $result_task = $stmt_get_task_data->get_result();
+                    if ($task_data = $result_task->fetch_assoc()) {
+                        $priority = $task_data['priority']; // Usar para el correo
+                        $original_created_at = $task_data['created_at']; // Usar para el UPDATE
                     }
                 }
-                $stmt_get_prio->close();
+                $stmt_get_task_data->close();
             }
-            $priority = !empty($data['priority']) ? $data['priority'] : $original_priority;
-            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, priority = ?, assigned_to_group = NULL WHERE id = ?");
+
+            // 2. Actualizar la tarea, preservando explícitamente la fecha de creación para
+            //    evitar que un posible trigger 'ON UPDATE' la modifique y reinicie el timer.
+            //    Ni la prioridad ni el status se incluyen, por lo que también se preservan.
+            $stmt = $conn->prepare("UPDATE tasks SET assigned_to_user_id = ?, instruction = ?, assigned_to_group = NULL, created_at = ? WHERE id = ?");
             if ($stmt) {
-                $stmt->bind_param("issi", $user_id, $instruction, $priority, $task_id);
+                $stmt->bind_param("issi", $user_id, $instruction, $original_created_at, $task_id);
             }
         } elseif ($alert_id) { // Crear nueva Tarea desde Alerta (sin task_id)
             // 1. Obtener la prioridad de la alerta original
