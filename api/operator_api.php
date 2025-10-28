@@ -114,6 +114,64 @@ if ($method === 'POST') {
 
         // Step 5: Commit transaction. All critical data is now saved.
         $conn->commit();
+
+        // --- Email Notification (Non-critical, happens after commit) ---
+        // Any errors here will be logged, but will not block the success response.
+        try {
+            $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
+            $stmt_users->execute();
+            $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt_users->close();
+
+            if (!empty($users_to_notify)) {
+                $discrepancy = $details_for_email['discrepancy'];
+                $invoice_number = $details_for_email['invoice_number'];
+                $subject = "";
+                $body_template = "";
+
+                if ($discrepancy != 0) {
+                    $discrepancy_formatted = number_format($discrepancy, 0, ',', '.');
+                    $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
+                    $body_template = "
+                        <h1>Alerta de Discrepancia</h1><p>Hola %s,</p><p>Se ha detectado una discrepancia monetaria que requiere atención inmediata.</p><hr>
+                        <ul><li><strong>Planilla Nro:</strong> %s</li><li><strong>Cliente:</strong> %s</li><li><strong>Operador:</strong> %s</li><li><strong>Monto de la Discrepancia:</strong> $%s</li></ul>
+                        <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles.</p>";
+                } else {
+                    $subject = "[INFO] Planilla " . $invoice_number . " Procesada Correctamente";
+                    $body_template = "
+                        <h1>Notificación de Procesamiento</h1><p>Hola %s,</p><p>Te informamos que la planilla <strong>%s</strong> ha sido procesada exitosamente sin diferencias.</p><hr>
+                        <ul><li><strong>Cliente:</strong> %s</li><li><strong>Operador:</strong> %s</li><li><strong>Resultado:</strong> Procesado sin discrepancias.</li></ul>
+                        <p>No se requiere ninguna acción.</p>";
+                }
+
+                foreach ($users_to_notify as $user) {
+                    try {
+                        $user_name = htmlspecialchars($user['name']);
+                        $inv_num_safe = htmlspecialchars($invoice_number);
+                        $client_name_safe = htmlspecialchars($details_for_email['client_name']);
+                        $operator_name_safe = htmlspecialchars($details_for_email['operator_name']);
+
+                        $final_body = "<div style='font-family: sans-serif;'>" .
+                                      (
+                                        $discrepancy != 0
+                                        ? sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe, htmlspecialchars($discrepancy_formatted))
+                                        : sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe)
+                                      ) .
+                                      "<br><p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p></div>";
+
+                        send_task_email($user['email'], $user_name, $subject, $final_body);
+                    } catch (Exception $email_ex) {
+                        error_log("Failed to send notification email to " . $user['email'] . " for invoice " . $invoice_number . ". Error: " . $email_ex->getMessage());
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Log error if fetching users or preparing email fails, but don't send error to client.
+            error_log("Operator API - Email sending process failed AFTER DB commit. Error: " . $e->getMessage());
+        }
+
+        // --- Final Success Response ---
+        // This is the VERY LAST thing to be sent to the client.
         echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente.']);
 
     } catch (Exception $e) {
@@ -121,67 +179,19 @@ if ($method === 'POST') {
         http_response_code(500);
         error_log("Operator API DB Error: " . $e->getMessage());
         echo json_encode(['success' => false, 'error' => 'Error al guardar los datos en la base de datos: ' . $e->getMessage()]);
-        $conn->close();
-        exit;
-    }
-
-    // --- Email Notification (Non-critical, happens after commit) ---
-    try {
-        $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
-        $stmt_users->execute();
-        $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt_users->close();
-
-        if (!empty($users_to_notify)) {
-            $discrepancy = $details_for_email['discrepancy'];
-            $invoice_number = $details_for_email['invoice_number'];
-            $subject = "";
-            $body_template = "";
-
-            if ($discrepancy != 0) {
-                $discrepancy_formatted = number_format($discrepancy, 0, ',', '.');
-                $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
-                $body_template = "
-                    <h1>Alerta de Discrepancia</h1><p>Hola %s,</p><p>Se ha detectado una discrepancia monetaria que requiere atención inmediata.</p><hr>
-                    <ul><li><strong>Planilla Nro:</strong> %s</li><li><strong>Cliente:</strong> %s</li><li><strong>Operador:</strong> %s</li><li><strong>Monto de la Discrepancia:</strong> $%s</li></ul>
-                    <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles.</p>";
-            } else {
-                $subject = "[INFO] Planilla " . $invoice_number . " Procesada Correctamente";
-                $body_template = "
-                    <h1>Notificación de Procesamiento</h1><p>Hola %s,</p><p>Te informamos que la planilla <strong>%s</strong> ha sido procesada exitosamente sin diferencias.</p><hr>
-                    <ul><li><strong>Cliente:</strong> %s</li><li><strong>Operador:</strong> %s</li><li><strong>Resultado:</strong> Procesado sin discrepancias.</li></ul>
-                    <p>No se requiere ninguna acción.</p>";
-            }
-
-            foreach ($users_to_notify as $user) {
-                try {
-                    $user_name = htmlspecialchars($user['name']);
-                    $inv_num_safe = htmlspecialchars($invoice_number);
-                    $client_name_safe = htmlspecialchars($details_for_email['client_name']);
-                    $operator_name_safe = htmlspecialchars($details_for_email['operator_name']);
-
-                    $final_body = "<div style='font-family: sans-serif;'>" .
-                                  (
-                                    $discrepancy != 0
-                                    ? sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe, htmlspecialchars($discrepancy_formatted))
-                                    : sprintf($body_template, $user_name, $inv_num_safe, $client_name_safe, $operator_name_safe)
-                                  ) .
-                                  "<br><p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p></div>";
-
-                    send_task_email($user['email'], $user_name, $subject, $final_body);
-                } catch (Exception $email_ex) {
-                    error_log("Failed to send notification email to " . $user['email'] . " for invoice " . $invoice_number . ". Error: " . $email_ex->getMessage());
-                }
-            }
+    } finally {
+        // Always close the connection
+        if (isset($conn) && $conn->ping()) {
+            $conn->close();
         }
-    } catch (Exception $e) {
-        // Log error if fetching users or preparing email fails, but don't send error to client.
-        error_log("Operator API - Email sending process failed AFTER DB commit. Error: " . $e->getMessage());
     }
-} else {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Método no permitido.']);
+    exit; // Ensure no other output is sent
 }
 
-$conn->close();
+// Fallback for non-POST requests or other issues
+http_response_code(405);
+echo json_encode(['success' => false, 'error' => 'Método no permitido.']);
+if (isset($conn) && $conn->ping()) {
+    $conn->close();
+}
 ?>
