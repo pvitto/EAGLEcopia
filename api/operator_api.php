@@ -1,6 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php';
+require_once '../send_email.php'; // Incluir la utilidad de correo
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Operador'])) {
@@ -98,8 +99,64 @@ if ($method === 'POST') {
 // --- FIN DEL NUEVO CÓDIGO ---
         }
 
+        // --- INICIO: LÓGICA DE NOTIFICACIÓN POR CORREO ---
+        $check_in_id_for_email = $data['check_in_id'];
+        $query_details = "
+            SELECT
+                ci.invoice_number,
+                c.name as client_name,
+                u.name as operator_name
+            FROM check_ins ci
+            JOIN clients c ON ci.client_id = c.id
+            JOIN users u ON u.id = ?
+            WHERE ci.id = ?
+        ";
+        $stmt_details = $conn->prepare($query_details);
+        $stmt_details->bind_param("ii", $user_id, $check_in_id_for_email);
+        $stmt_details->execute();
+        $result_details = $stmt_details->get_result();
+        $details = $result_details->fetch_assoc();
+        $stmt_details->close();
+
+        if ($details) {
+            $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
+            $email_body = "
+                <h1>Reporte de Conteo de Operador</h1>
+                <p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p>
+                <hr>
+                <h2>Detalles de la Planilla</h2>
+                <ul>
+                    <li><strong>Número de Planilla:</strong> " . htmlspecialchars($details['invoice_number']) . "</li>
+                    <li><strong>Cliente:</strong> " . htmlspecialchars($details['client_name']) . "</li>
+                </ul>
+                <h2>Desglose del Conteo</h2>
+                <table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 300px;'>
+                    <tr><td><strong>Denominación</strong></td><td style='text-align: right;'><strong>Cantidad</strong></td></tr>
+                    <tr><td>$100.000</td><td style='text-align: right;'>" . number_format($data['bills_100k']) . "</td></tr>
+                    <tr><td>$50.000</td><td style='text-align: right;'>" . number_format($data['bills_50k']) . "</td></tr>
+                    <tr><td>$20.000</td><td style='text-align: right;'>" . number_format($data['bills_20k']) . "</td></tr>
+                    <tr><td>$10.000</td><td style='text-align: right;'>" . number_format($data['bills_10k']) . "</td></tr>
+                    <tr><td>$5.000</td><td style='text-align: right;'>" . number_format($data['bills_5k']) . "</td></tr>
+                    <tr><td>$2.000</td><td style='text-align: right;'>" . number_format($data['bills_2k']) . "</td></tr>
+                    <tr><td>Monedas</td><td style='text-align: right;'>$ " . number_format($data['coins']) . "</td></tr>
+                </table>
+                <h2>Totales</h2>
+                <ul>
+                    <li><strong>Total Contado:</strong> $" . number_format($data['total_counted']) . "</li>
+                    <li><strong>Discrepancia:</strong> <strong style='color: " . ($data['discrepancy'] != 0 ? 'red' : 'green') . ";'>$" . number_format($data['discrepancy']) . "</strong></li>
+                </ul>
+                <p><strong>Observaciones del Operador:</strong> " . (!empty($data['observations']) ? htmlspecialchars($data['observations']) : 'N/A') . "</p>
+                <br>
+                <p><em>Este es un correo automático del sistema EAGLE 3.0.</em></p>
+            ";
+
+            // Enviar el correo
+            send_task_email('paolovittoriomancini@gmail.com', 'Admin Sistema', $email_subject, $email_body);
+        }
+        // --- FIN: LÓGICA DE NOTIFICACIÓN POR CORREO ---
+
         $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente.']);
+        echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente y notificado.']);
 
     } catch (Exception $e) {
         $conn->rollback();
