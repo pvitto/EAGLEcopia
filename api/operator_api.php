@@ -130,12 +130,7 @@ if ($method === 'POST') {
 
             // 2. Si hay destinatarios, construir y enviar el correo
             if (!empty($recipients)) {
-                // --- LÓGICA CONDICIONAL PARA EL ASUNTO ---
-                if ($data['discrepancy'] != 0) {
-                    $email_subject = "Discrepancia en Planilla: " . $details['invoice_number'];
-                } else {
-                    $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
-                }
+                $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
                 $email_body = "
                     <h1>Reporte de Conteo de Operador</h1>
                     <p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p>
