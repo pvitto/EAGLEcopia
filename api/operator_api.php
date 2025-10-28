@@ -119,39 +119,53 @@ if ($method === 'POST') {
         $stmt_details->close();
 
         if ($details) {
-            $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
-            $email_body = "
-                <h1>Reporte de Conteo de Operador</h1>
-                <p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p>
-                <hr>
-                <h2>Detalles de la Planilla</h2>
-                <ul>
-                    <li><strong>Número de Planilla:</strong> " . htmlspecialchars($details['invoice_number']) . "</li>
-                    <li><strong>Cliente:</strong> " . htmlspecialchars($details['client_name']) . "</li>
-                </ul>
-                <h2>Desglose del Conteo</h2>
-                <table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 300px;'>
-                    <tr><td><strong>Denominación</strong></td><td style='text-align: right;'><strong>Cantidad</strong></td></tr>
-                    <tr><td>$100.000</td><td style='text-align: right;'>" . number_format($data['bills_100k']) . "</td></tr>
-                    <tr><td>$50.000</td><td style='text-align: right;'>" . number_format($data['bills_50k']) . "</td></tr>
-                    <tr><td>$20.000</td><td style='text-align: right;'>" . number_format($data['bills_20k']) . "</td></tr>
-                    <tr><td>$10.000</td><td style='text-align: right;'>" . number_format($data['bills_10k']) . "</td></tr>
-                    <tr><td>$5.000</td><td style='text-align: right;'>" . number_format($data['bills_5k']) . "</td></tr>
-                    <tr><td>$2.000</td><td style='text-align: right;'>" . number_format($data['bills_2k']) . "</td></tr>
-                    <tr><td>Monedas</td><td style='text-align: right;'>$ " . number_format($data['coins']) . "</td></tr>
-                </table>
-                <h2>Totales</h2>
-                <ul>
-                    <li><strong>Total Contado:</strong> $" . number_format($data['total_counted']) . "</li>
-                    <li><strong>Discrepancia:</strong> <strong style='color: " . ($data['discrepancy'] != 0 ? 'red' : 'green') . ";'>$" . number_format($data['discrepancy']) . "</strong></li>
-                </ul>
-                <p><strong>Observaciones del Operador:</strong> " . (!empty($data['observations']) ? htmlspecialchars($data['observations']) : 'N/A') . "</p>
-                <br>
-                <p><em>Este es un correo automático del sistema EAGLE 3.0.</em></p>
-            ";
+            // 1. Obtener destinatarios (Admins y Digitadores)
+            $recipients = [];
+            $result_users = $conn->query("SELECT email, name FROM users WHERE role IN ('Admin', 'Digitador') AND email IS NOT NULL AND email != ''");
+            if ($result_users) {
+                while ($user_row = $result_users->fetch_assoc()) {
+                    $recipients[] = $user_row;
+                }
+            }
 
-            // Enviar el correo
-            send_task_email('paolovittoriomancini@gmail.com', 'Admin Sistema', $email_subject, $email_body);
+            // 2. Si hay destinatarios, construir y enviar el correo
+            if (!empty($recipients)) {
+                $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
+                $email_body = "
+                    <h1>Reporte de Conteo de Operador</h1>
+                    <p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p>
+                    <hr>
+                    <h2>Detalles de la Planilla</h2>
+                    <ul>
+                        <li><strong>Número de Planilla:</strong> " . htmlspecialchars($details['invoice_number']) . "</li>
+                        <li><strong>Cliente:</strong> " . htmlspecialchars($details['client_name']) . "</li>
+                    </ul>
+                    <h2>Desglose del Conteo</h2>
+                    <table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 300px;'>
+                        <tr><td><strong>Denominación</strong></td><td style='text-align: right;'><strong>Cantidad</strong></td></tr>
+                        <tr><td>$100.000</td><td style='text-align: right;'>" . number_format($data['bills_100k']) . "</td></tr>
+                        <tr><td>$50.000</td><td style='text-align: right;'>" . number_format($data['bills_50k']) . "</td></tr>
+                        <tr><td>$20.000</td><td style='text-align: right;'>" . number_format($data['bills_20k']) . "</td></tr>
+                        <tr><td>$10.000</td><td style='text-align: right;'>" . number_format($data['bills_10k']) . "</td></tr>
+                        <tr><td>$5.000</td><td style='text-align: right;'>" . number_format($data['bills_5k']) . "</td></tr>
+                        <tr><td>$2.000</td><td style='text-align: right;'>" . number_format($data['bills_2k']) . "</td></tr>
+                        <tr><td>Monedas</td><td style='text-align: right;'>$ " . number_format($data['coins']) . "</td></tr>
+                    </table>
+                    <h2>Totales</h2>
+                    <ul>
+                        <li><strong>Total Contado:</strong> $" . number_format($data['total_counted']) . "</li>
+                        <li><strong>Discrepancia:</strong> <strong style='color: " . ($data['discrepancy'] != 0 ? 'red' : 'green') . ";'>$" . number_format($data['discrepancy']) . "</strong></li>
+                    </ul>
+                    <p><strong>Observaciones del Operador:</strong> " . (!empty($data['observations']) ? htmlspecialchars($data['observations']) : 'N/A') . "</p>
+                    <br>
+                    <p><em>Este es un correo automático del sistema EAGLE 3.0.</em></p>
+                ";
+
+                // 3. Enviar el correo a cada destinatario
+                foreach ($recipients as $recipient) {
+                    send_task_email($recipient['email'], $recipient['name'], $email_subject, $email_body);
+                }
+            }
         }
         // --- FIN: LÓGICA DE NOTIFICACIÓN POR CORREO ---
 
