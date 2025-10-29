@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && docker-php-ext-install pdo pdo_pgsql
 
-# 3. Instalar Composer (el gestor de paquetes de PHP)
+# 3. Instalar Composer (el gestor de paquetes de PHP)-
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # 4. Copiar todos los archivos de tu proyecto al servidor web
