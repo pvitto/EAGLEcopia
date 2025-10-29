@@ -1,2 +1,2 @@
 # EAGLE
-nuva version mas modern ay mas fresca
+nuva version mas modern ay mas no
