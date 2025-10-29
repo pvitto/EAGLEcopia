@@ -3,7 +3,11 @@
         'name' => '__root__',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'eec9696e1697eec9ec9efd9401149ec5bd271e19',
+<<<<<<< HEAD
+        'reference' => '86202933f29c1538a9f3046cdaf08bd1fea4f8ec',
+=======
+        'reference' => 'fc66687f069ee52b5b68a2188d914cd3dfced997',
+>>>>>>> parent of 8620293 (feat: Add conditional subject for discrepancy emails)
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +17,11 @@
         '__root__' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'eec9696e1697eec9ec9efd9401149ec5bd271e19',
+<<<<<<< HEAD
+            'reference' => '86202933f29c1538a9f3046cdaf08bd1fea4f8ec',
+=======
+            'reference' => 'fc66687f069ee52b5b68a2188d914cd3dfced997',
+>>>>>>> parent of 8620293 (feat: Add conditional subject for discrepancy emails)
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

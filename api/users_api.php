@@ -24,15 +24,17 @@ try {
         $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         $name = $_POST['name'] ?? '';
         $email = $_POST['email'] ?? '';
+        $whatsapp = $_POST['whatsapp'] ?? '';
         $role = $_POST['role'] ?? '';
         $gender = $_POST['gender'] ?? '';
         $password = $_POST['password'] ?? '';
 
         // --- Validación ---
-        if (empty($name) || empty($email) || empty($role) || empty($gender)) {
-            throw new Exception("Todos los campos excepto la contraseña son obligatorios.");
+        if (empty($name) || empty($role) || empty($gender)) {
+            throw new Exception("Los campos de nombre, rol y género son obligatorios.");
         }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        // Validar email solo si se proporciona
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("El formato del correo electrónico no es válido.");
         }
 
@@ -40,11 +42,11 @@ try {
             // --- Actualizar Usuario ---
             if (!empty($password)) {
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ?, password = ? WHERE id = ?");
-                $stmt->bind_param("sssssi", $name, $email, $role, $gender, $hashed_password, $id);
+                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, whatsapp = ?, role = ?, gender = ?, password = ? WHERE id = ?");
+                $stmt->bind_param("ssssssi", $name, $email, $whatsapp, $role, $gender, $hashed_password, $id);
             } else {
-                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ?, gender = ? WHERE id = ?");
-                $stmt->bind_param("ssssi", $name, $email, $role, $gender, $id);
+                $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, whatsapp = ?, role = ?, gender = ? WHERE id = ?");
+                $stmt->bind_param("sssssi", $name, $email, $whatsapp, $role, $gender, $id);
             }
             $action = "actualizado";
         } else {
@@ -53,8 +55,8 @@ try {
                 throw new Exception("La contraseña es obligatoria para nuevos usuarios.");
             }
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO users (name, email, role, gender, password) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssss", $name, $email, $role, $gender, $hashed_password);
+            $stmt = $conn->prepare("INSERT INTO users (name, email, whatsapp, role, gender, password) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssss", $name, $email, $whatsapp, $role, $gender, $hashed_password);
             $action = "creado";
         }
 
@@ -115,7 +117,7 @@ try {
         }
     } elseif ($method === 'GET') {
         // Manejar la obtención de todos los usuarios
-        $result = $conn->query("SELECT id, name, email, role, gender FROM users ORDER BY name ASC");
+        $result = $conn->query("SELECT id, name, email, whatsapp, role, gender FROM users ORDER BY name ASC");
         if ($result) {
             $users = [];
             while ($row = $result->fetch_assoc()) {

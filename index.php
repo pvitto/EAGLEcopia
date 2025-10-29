@@ -7,7 +7,7 @@ require 'db_connection.php'; // This should define $conn and connection details
 
 // --- Cargar datos iniciales ---
 $all_users = [];
-$users_result = $conn->query("SELECT id, name, role, email, gender FROM users ORDER BY name ASC");
+$users_result = $conn->query("SELECT id, name, role, email, gender, whatsapp FROM users ORDER BY name ASC");
 if ($users_result) { while ($row = $users_result->fetch_assoc()) { $all_users[] = $row; } }
 $admin_users_list = ($_SESSION['user_role'] === 'Admin') ? $all_users : [];
 
@@ -469,7 +469,8 @@ $conn->close();
                 <form id="user-form" class="mt-6 space-y-4">
                     <input type="hidden" id="user-id" name="id">
                     <div><label for="user-name" class="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label><input type="text" id="user-name" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
-                    <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
+                    <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                    <div><label for="user-whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label><input type="text" id="user-whatsapp" name="whatsapp" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label for="user-role" class="block text-sm font-medium text-gray-700 mb-1">Rol</label><select id="user-role" name="role" class="w-full px-3 py-2 border border-gray-300 rounded-md" required><option value="Operador">Operador</option><option value="Checkinero">Checkinero</option><option value="Digitador">Digitador</option><option value="Admin">Admin</option></select></div>
                     <div>
                         <label for="user-gender" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
@@ -860,71 +861,113 @@ $can_complete = $user_can_act && $task_is_active;
                     <h2 class="text-2xl font-bold text-gray-900">Módulo de Digitador: Gestión de Cierre e Informes</h2>
                 </div>
 
-                <div class="lg:col-span-2 space-y-4 mb-8">
-                    <h2 class="text-xl font-bold text-gray-900">Alertas y Tareas Prioritarias</h2>
-                    <?php if (empty($main_priority_items)): ?>
-                        <p class="text-sm text-gray-500 bg-white p-4 rounded-lg shadow-sm">No hay items prioritarios pendientes.</p>
-                    <?php else: foreach ($main_priority_items as $item): ?>
-                        <?php
-                            $is_manual = $item['item_type'] === 'manual_task';
-                            $is_group_task = !empty($item['assigned_to_group']);
-                            $assigned_names = $item['assigned_names'] ?? null;
-                            $task_id_to_use = $item['user_task_id'] ?? $item['task_id'] ?? $item['id']; // Usa el ID específico del usuario si existe
-                            $alert_id_or_null = $is_manual ? 'null' : ($item['id'] ?? 'null');
-                            $form_id_prefix = $task_id_to_use;
-                            $is_admin = $current_user_role === 'Admin';
-                            $is_assigned_individually = !empty($item['user_task_id']);
-                            $is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
-                            $user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
-                            $task_is_active = (isset($item['task_status']) && in_array($item['task_status'], ['Pendiente','Media','Alta','Crítica'])) || !isset($item['task_status']);
-                            $can_complete = $user_can_act && $task_is_active;
-                            $priority_to_use = $item['current_priority'];
-                            $color_map = ['Critica' => ['bg' => 'bg-red-100', 'border' => 'border-red-500', 'text' => 'text-red-800', 'badge' => 'bg-red-200'],'Alta' => ['bg' => 'bg-orange-100', 'border' => 'border-orange-500', 'text' => 'text-orange-800', 'badge' => 'bg-orange-200']];
-                            $color = $color_map[$priority_to_use] ?? ['bg' => 'bg-gray-100', 'border' => 'border-gray-400', 'text' => 'text-gray-800', 'badge' => 'bg-gray-200'];
-                        ?>
-                        <div class="bg-white rounded-lg shadow-md overflow-hidden task-card" data-task-id="<?php echo $task_id_to_use; ?>">
-                            <div class="p-4 <?php echo $color['bg']; ?> border-l-8 <?php echo $color['border']; ?>">
-                                <div class="flex justify-between items-start">
-                                    <p class="font-semibold <?php echo $color['text']; ?> text-lg">
-                                        <?php echo ($is_manual ? 'Tarea: ' : '') . htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?>
-                                        <?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span> <?php endif; ?>
-                                        <span class="ml-2 <?php echo $color['badge'].' '.$color['text']; ?> text-xs font-bold px-2 py-0.5 rounded-full"><?php echo strtoupper($priority_to_use); ?></span>
-                                    </p>
-                                    <?php if ($can_complete): ?>
-                                        <button onclick="toggleForm('complete-form-<?php echo $form_id_prefix; ?>', this)" class="p-1 bg-green-200 text-green-700 rounded-full hover:bg-green-300 ml-auto" title="Marcar como completada"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
-                                     <?php endif; ?>
-                                </div>
-                                <p class="text-sm mt-1"><?php echo htmlspecialchars($is_manual ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
-                                <?php if (!empty($item['end_datetime'])): ?> <div class="countdown-timer text-sm font-bold mt-2" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div> <?php endif; ?>
-                                <div class="mt-4 flex items-center space-x-4 border-t pt-3">
-                                     <button onclick="toggleForm('assign-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-blue-600 hover:text-blue-800"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?></button>
-                                    <button onclick="toggleForm('reminder-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-gray-600 hover:text-gray-800">Recordatorio</button>
-                                    <div class="flex-grow text-right text-sm">
-                                        <?php if($is_group_task): ?> <span class="font-semibold text-purple-700">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></span>
-                                        <?php elseif (!empty($assigned_names)): ?> <span class="font-semibold text-green-700">Asignada a: <?php echo htmlspecialchars($assigned_names); ?></span>
-                                        <?php else: ?> <span class="font-semibold text-gray-500">Pendiente de Asignación</span> <?php endif; ?>
+                <style>
+                    .carousel-container {
+                        scroll-behavior: smooth;
+                        scrollbar-width: none; /* Firefox */
+                    }
+                    .carousel-container::-webkit-scrollbar {
+                        display: none; /* Safari and Chrome */
+                    }
+                </style>
+                <div class="mb-8">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-gray-900">Alertas y Tareas Prioritarias</h2>
+                        <div class="flex space-x-2">
+                            <button id="carousel-prev" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="carousel-next" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="digitador-carousel" class="carousel-container flex overflow-x-auto space-x-4 pb-4">
+                        <?php if (empty($main_priority_items)): ?>
+                            <p class="text-sm text-gray-500 bg-white p-4 rounded-lg shadow-sm w-full text-center">No hay items prioritarios pendientes.</p>
+                        <?php else: foreach ($main_priority_items as $item): ?>
+                            <?php
+                                // Same PHP logic as before to prepare variables
+                                $is_manual = $item['item_type'] === 'manual_task';
+                                $is_group_task = !empty($item['assigned_to_group']);
+                                $assigned_names = $item['assigned_names'] ?? null;
+                                $task_id_to_use = $item['user_task_id'] ?? $item['task_id'] ?? $item['id'];
+                                $alert_id_or_null = $is_manual ? 'null' : ($item['id'] ?? 'null');
+                                $form_id_prefix = 'd-'.$task_id_to_use; // Prefix to avoid ID clashes with general panel
+                                $is_admin = $current_user_role === 'Admin';
+                                $is_assigned_individually = !empty($item['user_task_id']);
+                                $is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
+                                $user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
+                                $task_is_active = (isset($item['task_status']) && in_array($item['task_status'], ['Pendiente','Media','Alta','Crítica'])) || !isset($item['task_status']);
+                                $can_complete = $user_can_act && $task_is_active;
+                                $priority_to_use = $item['current_priority'];
+                                $color_map = ['Critica' => ['bg' => 'bg-red-100', 'border' => 'border-red-500', 'text' => 'text-red-800', 'badge' => 'bg-red-200'],'Alta' => ['bg' => 'bg-orange-100', 'border' => 'border-orange-500', 'text' => 'text-orange-800', 'badge' => 'bg-orange-200']];
+                                $color = $color_map[$priority_to_use] ?? ['bg' => 'bg-gray-100', 'border' => 'border-gray-400', 'text' => 'text-gray-800', 'badge' => 'bg-gray-200'];
+                            ?>
+                            <div class="flex-none w-96">
+                                <div class="bg-white rounded-lg shadow-md overflow-hidden task-card h-full flex flex-col" data-task-id="<?php echo $task_id_to_use; ?>">
+                                    <div class="p-4 <?php echo $color['bg']; ?> border-l-8 <?php echo $color['border']; ?> flex-grow">
+                                        <div class="flex justify-between items-start">
+                                            <p class="font-semibold <?php echo $color['text']; ?> text-lg">
+                                                <?php echo ($is_manual ? 'Tarea: ' : '') . htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?>
+                                                <?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600 text-sm">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span> <?php endif; ?>
+                                                <span class="ml-2 <?php echo $color['badge'].' '.$color['text']; ?> text-xs font-bold px-2 py-0.5 rounded-full"><?php echo strtoupper($priority_to_use); ?></span>
+                                            </p>
+                                            <?php if ($can_complete): ?>
+                                                <button onclick="toggleForm('complete-form-<?php echo $form_id_prefix; ?>', this)" class="p-1 bg-green-200 text-green-700 rounded-full hover:bg-green-300 ml-auto" title="Marcar como completada"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
+                                            <?php endif; ?>
+                                        </div>
+                                        <p class="text-sm mt-1"><?php echo htmlspecialchars($is_manual ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
+                                        <?php if (!empty($item['end_datetime'])): ?> <div class="countdown-timer text-sm font-bold mt-2" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div> <?php endif; ?>
+                                        <div class="mt-4 flex items-center space-x-4 border-t pt-3">
+                                            <button onclick="toggleForm('assign-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-blue-600 hover:text-blue-800"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?></button>
+                                            <button onclick="toggleForm('reminder-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-gray-600 hover:text-gray-800">Recordatorio</button>
+                                            <div class="flex-grow text-right text-sm">
+                                                <?php if($is_group_task): ?> <span class="font-semibold text-purple-700">Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></span>
+                                                <?php elseif (!empty($assigned_names)): ?> <span class="font-semibold text-green-700"><?php echo htmlspecialchars($assigned_names); ?></span>
+                                                <?php else: ?> <span class="font-semibold text-gray-500">Sin Asignar</span> <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="complete-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                        <h4 class="text-sm font-semibold mb-2">Completar Tarea</h4>
+                                        <textarea id="resolution-note-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md" placeholder="Observación de cierre..."></textarea>
+                                        <button type="button" onclick="completeTask(<?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-1 mt-2 rounded-md">Confirmar</button>
+                                    </div>
+                                    <div id="assign-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                        <h4 class="text-sm font-semibold mb-2">Asignar Tarea</h4>
+                                        <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></optgroup></select>
+                                        <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
+                                        <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-1 mt-2 rounded-md">Confirmar</button>
+                                    </div>
+                                    <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                        <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
+                                        <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
+                                        <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-1 mt-2 rounded-md">Crear</button>
                                     </div>
                                 </div>
                             </div>
-                            <div id="complete-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                <h4 class="text-sm font-semibold mb-2">Completar Tarea</h4>
-                                <textarea id="resolution-note-<?php echo $form_id_prefix; ?>" rows="3" class="w-full p-2 text-sm border rounded-md" placeholder="Añadir observación de cierre (obligatorio)..."></textarea>
-                                <button type="button" onclick="completeTask(<?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar Cierre</button>
-                            </div>
-                            <div id="assign-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                 <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
-                                 <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
-                                 <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                 <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
-                            </div>
-                            <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                 <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
-                                 <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                 <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
-                            </div>
-                        </div>
-                    <?php endforeach; endif; ?>
+                        <?php endforeach; endif; ?>
+                    </div>
                 </div>
+                <script>
+                    (() => {
+                        const carousel = document.getElementById('digitador-carousel');
+                        const prevBtn = document.getElementById('carousel-prev');
+                        const nextBtn = document.getElementById('carousel-next');
+
+                        if (carousel && prevBtn && nextBtn) {
+                            const scrollAmount = 400; // w-96 (384px) + space-x-4 (1rem = 16px) = 400
+                            prevBtn.addEventListener('click', () => {
+                                carousel.scrollLeft -= scrollAmount;
+                            });
+                            nextBtn.addEventListener('click', () => {
+                                carousel.scrollLeft += scrollAmount;
+                            });
+                        }
+                    })();
+                </script>
                             <div class="mb-8 flex space-x-2">
     <button id="btn-supervision-operador" class="px-4 py-2 text-sm font-semibold rounded-md bg-gray-200 text-gray-700">Abrir llegadas de Operador</button>
     
@@ -981,7 +1024,7 @@ $can_complete = $user_can_act && $task_is_active;
             </div>
 
             <?php if ($_SESSION['user_role'] === 'Admin'): ?>
-            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
+            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">WhatsApp</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
             <div id="content-trazabilidad" class="hidden"><h2 class="text-xl font-bold text-gray-900 mb-4">Trazabilidad de Tareas Completadas</h2><div class="bg-white p-4 rounded-xl shadow-sm mb-6"><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4"><div><label for="filter-start-date" class="text-sm">F. Inicio</label><input type="date" id="filter-start-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-end-date" class="text-sm">F. Fin</label><input type="date" id="filter-end-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-user" class="text-sm">Asignado a</label><select id="filter-user" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-checker" class="text-sm">Check por</label><select id="filter-checker" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-priority" class="text-sm">P. Final</label><select id="filter-priority" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option></select></div><div class="flex items-end space-x-2"><button onclick="applyTrazabilidadFilters()" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md">Filtrar</button><button onclick="exportToExcel()" class="w-full bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Excel</button></div></div></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><div class="overflow-x-auto"><table id="trazabilidad-table" class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Tarea</th><th class="px-6 py-3">Desc.</th><th class="px-6 py-3">P. Ini.</th><th class="px-6 py-3">P. Fin.</th><th class="px-6 py-3 sortable" data-column-name="created_at" onclick="sortTableByDate('created_at')">H. Inicio <span></span></th><th class="px-6 py-3 sortable" data-column-name="completed_at" onclick="sortTableByDate('completed_at')">H. Fin <span></span></th><th class="px-6 py-3">T. Resp.</th><th class="px-6 py-3">Asig. a</th><th class="px-6 py-3">Asig. por</th><th class="px-6 py-3">Check por</th><th class="px-6 py-3">Obs. Cierre</th><th class="px-6 py-3">Acciones</th></tr></thead><tbody id="trazabilidad-tbody"></tbody></table></div></div></div>
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-routes" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
@@ -1979,6 +2022,7 @@ async function handleCheckinSubmit(event) {
             userIdInput.value = user.id;
             document.getElementById('user-name').value = user.name;
             document.getElementById('user-email').value = user.email;
+            document.getElementById('user-whatsapp').value = user.whatsapp || '';
             document.getElementById('user-role').value = user.role;
             document.getElementById('user-gender').value = user.gender || ''; // Usar '' si es null
             userPasswordInput.required = false;
@@ -2000,7 +2044,7 @@ async function handleCheckinSubmit(event) {
         }
         tbody.innerHTML = '';
         if (!users || users.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 5
+             tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 6
              return;
         }
         users.forEach(user => {
@@ -2012,6 +2056,7 @@ async function handleCheckinSubmit(event) {
                 id: user.id,
                 name: user.name || '',
                 email: user.email || '',
+                whatsapp: user.whatsapp || '',
                 role: user.role || '',
                 gender: user.gender || ''
             };
@@ -2021,6 +2066,7 @@ async function handleCheckinSubmit(event) {
                 <tr id="user-row-${safeUser.id}">
                     <td class="px-6 py-4">${safeUser.name}</td>
                     <td class="px-6 py-4">${safeUser.email}</td>
+                    <td class="px-6 py-4">${safeUser.whatsapp}</td>
                     <td class="px-6 py-4"><span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">${displayRole}</span></td>
                     <td class="px-6 py-4 text-center">${safeUser.gender || 'N/A'}</td> <td class="px-6 py-4 text-center">
                         <button onclick='openModal(${userJson})' class="font-medium text-blue-600 hover:text-blue-800">Editar</button>
@@ -2614,6 +2660,7 @@ function updateAlertsDisplay(newAlerts) {
     newHighPriorityAlertsFound = false; // Resetear bandera
 
     newAlerts.forEach(alert => {
+        if (!alert) return; // --- FIX: Prevent crash on null/undefined alerts ---
         const isHighPriority = alert.priority === 'Critica' || alert.priority === 'Alta';
         const list = isHighPriority ? highPriorityList : mediumPriorityList;
         const colorClass = isHighPriority ? (alert.priority === 'Critica' ? 'red' : 'orange') : 'yellow';
