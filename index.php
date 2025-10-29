@@ -1734,28 +1734,42 @@ async function handleCheckinSubmit(event) {
             } else { alert('Error: ' + result.error); operatorPanel.classList.add('hidden'); }
         } catch (error) { console.error('Error en la consulta:', error); alert('Error de conexión.'); }
     }
-    function animateProgressBar() {
+    function animateProgressBar(callback) {
         const progressBar = document.getElementById('progress-bar');
         const progressBarText = document.getElementById('progress-bar-text');
         let width = 0;
+        progressBar.style.width = '0%';
+        progressBarText.textContent = '0%';
+
         const interval = setInterval(() => {
             if (width >= 100) {
                 clearInterval(interval);
+                if (callback) callback();
             } else {
-                width++;
-                progressBar.style.width = width + '%';
-                progressBarText.textContent = width + '%';
+                if (width === 50) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        width++;
+                        progressBar.style.width = width + '%';
+                        progressBarText.textContent = width + '%';
+                        animateProgressBar(callback);
+                    }, 2000);
+                } else {
+                    width++;
+                    progressBar.style.width = width + '%';
+                    progressBarText.textContent = width + '%';
+                }
             }
-        }, 20); // Adjust the interval for speed
+        }, 50); // Slower interval
     }
 
     async function handleDenominationSave(event) {
         event.preventDefault();
         const loadingOverlay = document.getElementById('loading-overlay');
         loadingOverlay.classList.remove('hidden');
-        animateProgressBar();
 
-        const payload = {
+        animateProgressBar(async () => {
+            const payload = {
             check_in_id: document.getElementById('op-checkin-id').value,
             bills_100k: parseInt(document.querySelector('#denomination-form [data-value="100000"] .denomination-qty').value) || 0,
             bills_50k: parseInt(document.querySelector('#denomination-form [data-value="50000"] .denomination-qty').value) || 0,
@@ -1882,7 +1896,8 @@ async function handleCheckinSubmit(event) {
         } finally {
             loadingOverlay.classList.add('hidden');
         }
-    }
+    });
+}
 
 
 
