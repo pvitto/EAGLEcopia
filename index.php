@@ -1753,7 +1753,7 @@ async function handleCheckinSubmit(event) {
                 progressBar.style.width = width + '%';
                 progressBarText.textContent = width + '%';
             }
-        }, 30); // 30ms * 100 = 3000ms = 3 seconds total
+        }, 60); // 60ms * 100 = 6000ms = 6 seconds total
     }
 
     async function handleDenominationSave(event) {
