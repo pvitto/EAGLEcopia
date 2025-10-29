@@ -14,6 +14,12 @@ $current_user_role = $_SESSION['user_role'];
 $since_timestamp = isset($_GET['since']) ? intval($_GET['since']) : (time() - 30); // Revisa últimos 30 seg por defecto
 
 $normalized_role = strtolower($current_user_role);
+$role_base_map = [
+    'Digitadora' => 'Digitador',
+    'Operadora' => 'Operador',
+    'Checkinera' => 'Checkinero'
+];
+$current_user_role_base = $role_base_map[$current_user_role] ?? $current_user_role;
 $allowed_roles = ['admin', 'digitador', 'digitadora'];
 
 if (!in_array($normalized_role, $allowed_roles, true)) {
@@ -29,7 +35,7 @@ $new_alerts = [];
 $user_filter = '';
 if ($normalized_role !== 'admin') {
     // Filtro para alertas asignadas al usuario o a su grupo
-    $escaped_role = $conn->real_escape_string($current_user_role);
+    $escaped_role = $conn->real_escape_string($current_user_role_base);
     $user_filter = " AND (t.assigned_to_user_id = {$current_user_id} OR (t.assigned_to_group = '{$escaped_role}' AND (t.assigned_to_user_id IS NULL OR t.assigned_to_user_id = 0)))";
 }
 
@@ -49,13 +55,14 @@ $sql = "
       t.status = 'Pendiente' AND -- Solo pendientes
       ci.status = 'Discrepancia' AND -- Garantiza que la alerta sea por discrepancia
       (t.priority IN ('Critica', 'Alta') OR a.priority IN ('Critica', 'Alta')) AND -- Solo prioritarias
-      UNIX_TIMESTAMP(COALESCE(a.created_at, t.created_at)) > ? -- Creadas después de la última revisión
+      UNIX_TIMESTAMP(COALESCE(a.created_at, t.created_at)) >= ? -- Creadas después de la última revisión
       {$user_filter} -- Filtro de usuario/grupo
     ORDER BY COALESCE(a.created_at, t.created_at) DESC
     LIMIT 5 -- Limitar resultados por si acaso
 ";
 
 $stmt = $conn->prepare($sql);
+$latest_seen_timestamp = $since_timestamp;
 if ($stmt) {
     $stmt->bind_param("i", $since_timestamp);
     $stmt->execute();
@@ -66,12 +73,19 @@ if ($stmt) {
         $priority = $row['priority'] ?? $row['task_priority'];
 
         if ($priority === 'Critica' || $priority === 'Alta') {
+            $created_at_value = $row['created_at'] ?? $row['task_created_at'];
+            if ($created_at_value) {
+                $row_timestamp = strtotime($created_at_value);
+                if ($row_timestamp !== false) {
+                    $latest_seen_timestamp = max($latest_seen_timestamp, $row_timestamp);
+                }
+            }
             $new_alerts[] = [
                 'id' => $row['alert_id'],
                 'title' => $row['title'],
                 'description' => $row['description'],
                 'priority' => $priority,
-                'created_at' => $row['created_at'] ?? $row['task_created_at'],
+                'created_at' => $created_at_value,
                 'type' => 'discrepancy_alert',
                 'invoice_number' => $row['invoice_number'] ?? null
             ];
@@ -89,6 +103,6 @@ $conn->close();
 echo json_encode([
     'success' => true,
     'alerts' => $new_alerts,
-    'timestamp' => time() // Devuelve el timestamp actual para la próxima consulta
+    'timestamp' => max(time(), $latest_seen_timestamp) // Devuelve el timestamp actual para la próxima consulta
 ]);
 ?>
