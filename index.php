@@ -1744,23 +1744,16 @@ async function handleCheckinSubmit(event) {
         const interval = setInterval(() => {
             if (width >= 100) {
                 clearInterval(interval);
-                if (callback) callback();
-            } else {
-                if (width === 50) {
-                    clearInterval(interval);
-                    setTimeout(() => {
-                        width++;
-                        progressBar.style.width = width + '%';
-                        progressBarText.textContent = width + '%';
-                        animateProgressBar(callback);
-                    }, 2000);
-                } else {
-                    width++;
-                    progressBar.style.width = width + '%';
-                    progressBarText.textContent = width + '%';
+                if (callback) {
+                    // Short delay to ensure 100% is visible before executing callback
+                    setTimeout(callback, 100);
                 }
+            } else {
+                width++;
+                progressBar.style.width = width + '%';
+                progressBarText.textContent = width + '%';
             }
-        }, 50); // Slower interval
+        }, 30); // 30ms * 100 = 3000ms = 3 seconds total
     }
 
     async function handleDenominationSave(event) {
