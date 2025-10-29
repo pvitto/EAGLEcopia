@@ -3,11 +3,7 @@
         'name' => '__root__',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-<<<<<<< HEAD
-        'reference' => '86202933f29c1538a9f3046cdaf08bd1fea4f8ec',
-=======
-        'reference' => 'fc66687f069ee52b5b68a2188d914cd3dfced997',
->>>>>>> parent of 8620293 (feat: Add conditional subject for discrepancy emails)
+        'reference' => 'c93fd58e253df19983434d49c10c43884c108bee',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -17,20 +13,16 @@
         '__root__' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-<<<<<<< HEAD
-            'reference' => '86202933f29c1538a9f3046cdaf08bd1fea4f8ec',
-=======
-            'reference' => 'fc66687f069ee52b5b68a2188d914cd3dfced997',
->>>>>>> parent of 8620293 (feat: Add conditional subject for discrepancy emails)
+            'reference' => 'c93fd58e253df19983434d49c10c43884c108bee',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
             'dev_requirement' => false,
         ),
         'phpmailer/phpmailer' => array(
-            'pretty_version' => 'v6.12.0',
-            'version' => '6.12.0.0',
-            'reference' => 'd1ac35d784bf9f5e61b424901d5a014967f15b12',
+            'pretty_version' => 'v7.0.0',
+            'version' => '7.0.0.0',
+            'reference' => 'c7111310c6116ba508a6a170a89eaaed2129bd42',
             'type' => 'library',
             'install_path' => __DIR__ . '/../phpmailer/phpmailer',
             'aliases' => array(),
