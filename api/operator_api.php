@@ -99,81 +99,61 @@ if ($method === 'POST') {
 // --- FIN DEL NUEVO CÓDIGO ---
         }
 
-        // --- INICIO: LÓGICA DE NOTIFICACIÓN POR CORREO ---
-        $check_in_id_for_email = $data['check_in_id'];
-        $query_details = "
-            SELECT
-                ci.invoice_number,
-                c.name as client_name,
-                u.name as operator_name
-            FROM check_ins ci
-            JOIN clients c ON ci.client_id = c.id
-            JOIN users u ON u.id = ?
-            WHERE ci.id = ?
-        ";
-        $stmt_details = $conn->prepare($query_details);
-        $stmt_details->bind_param("ii", $user_id, $check_in_id_for_email);
-        $stmt_details->execute();
-        $result_details = $stmt_details->get_result();
-        $details = $result_details->fetch_assoc();
-        $stmt_details->close();
-
-        if ($details) {
-            // 1. Obtener destinatarios (Admins y Digitadores)
-            $recipients = [];
-            $result_users = $conn->query("SELECT email, name FROM users WHERE role IN ('Admin', 'Digitador') AND email IS NOT NULL AND email != ''");
-            if ($result_users) {
-                while ($user_row = $result_users->fetch_assoc()) {
-                    $recipients[] = $user_row;
-                }
-            }
-
-            // 2. Si hay destinatarios, construir y enviar el correo
-            if (!empty($recipients)) {
-                $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
-                $email_body = "
-                    <h1>Reporte de Conteo de Operador</h1>
-                    <p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p>
-                    <hr>
-                    <h2>Detalles de la Planilla</h2>
-                    <ul>
-                        <li><strong>Número de Planilla:</strong> " . htmlspecialchars($details['invoice_number']) . "</li>
-                        <li><strong>Cliente:</strong> " . htmlspecialchars($details['client_name']) . "</li>
-                    </ul>
-                    <h2>Desglose del Conteo</h2>
-                    <table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 300px;'>
-                        <tr><td><strong>Denominación</strong></td><td style='text-align: right;'><strong>Cantidad</strong></td></tr>
-                        <tr><td>$100.000</td><td style='text-align: right;'>" . number_format($data['bills_100k']) . "</td></tr>
-                        <tr><td>$50.000</td><td style='text-align: right;'>" . number_format($data['bills_50k']) . "</td></tr>
-                        <tr><td>$20.000</td><td style='text-align: right;'>" . number_format($data['bills_20k']) . "</td></tr>
-                        <tr><td>$10.000</td><td style='text-align: right;'>" . number_format($data['bills_10k']) . "</td></tr>
-                        <tr><td>$5.000</td><td style='text-align: right;'>" . number_format($data['bills_5k']) . "</td></tr>
-                        <tr><td>$2.000</td><td style='text-align: right;'>" . number_format($data['bills_2k']) . "</td></tr>
-                        <tr><td>Monedas</td><td style='text-align: right;'>$ " . number_format($data['coins']) . "</td></tr>
-                    </table>
-                    <h2>Totales</h2>
-                    <ul>
-                        <li><strong>Total Contado:</strong> $" . number_format($data['total_counted']) . "</li>
-                        <li><strong>Discrepancia:</strong> <strong style='color: " . ($data['discrepancy'] != 0 ? 'red' : 'green') . ";'>$" . number_format($data['discrepancy']) . "</strong></li>
-                    </ul>
-                    <p><strong>Observaciones del Operador:</strong> " . (!empty($data['observations']) ? htmlspecialchars($data['observations']) : 'N/A') . "</p>
-                    <br>
-                    <p><em>Este es un correo automático del sistema EAGLE 3.0.</em></p>
-                ";
-
-                // 3. Enviar el correo a cada destinatario
-                foreach ($recipients as $recipient) {
-                    send_task_email($recipient['email'], $recipient['name'], $email_subject, $email_body);
-                }
-            }
-        }
-        // --- FIN: LÓGICA DE NOTIFICACIÓN POR CORREO ---
-
+        // --- Confirmar transacción en la BD ANTES de enviar correos ---
         $conn->commit();
-        echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente y notificado.']);
+        echo json_encode(['success' => true, 'message' => 'Conteo guardado. Notificando...']);
+
+        // --- Enviar correos DESPUÉS de confirmar la transacción ---
+        try {
+            $check_in_id_for_email = $data['check_in_id'];
+            $query_details = "
+                SELECT
+                    ci.invoice_number,
+                    c.name as client_name,
+                    u.name as operator_name
+                FROM check_ins ci
+                JOIN clients c ON ci.client_id = c.id
+                JOIN users u ON u.id = ?
+                WHERE ci.id = ?
+            ";
+            $stmt_details = $conn->prepare($query_details);
+            $stmt_details->bind_param("ii", $user_id, $check_in_id_for_email);
+            $stmt_details->execute();
+            $result_details = $stmt_details->get_result();
+            $details = $result_details->fetch_assoc();
+            $stmt_details->close();
+
+            if ($details) {
+                $recipients = [];
+                $result_users = $conn->query("SELECT email, name FROM users WHERE role IN ('Admin', 'Digitador') AND email IS NOT NULL AND email != ''");
+                if ($result_users) {
+                    while ($user_row = $result_users->fetch_assoc()) {
+                        $recipients[] = $user_row;
+                    }
+                }
+
+                if (!empty($recipients)) {
+                    if ($data['discrepancy'] != 0) {
+                        $email_subject = "Discrepancia en Planilla: " . $details['invoice_number'];
+                    } else {
+                        $email_subject = "Nuevo Conteo de Operador: Planilla " . $details['invoice_number'];
+                    }
+                    $email_body = "<h1>Reporte de Conteo de Operador</h1><p>El operador <strong>" . htmlspecialchars($details['operator_name']) . "</strong> ha guardado un nuevo conteo.</p><hr><h2>Detalles de la Planilla</h2><ul><li><strong>Número de Planilla:</strong> " . htmlspecialchars($details['invoice_number']) . "</li><li><strong>Cliente:</strong> " . htmlspecialchars($details['client_name']) . "</li></ul><h2>Desglose del Conteo</h2><table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 300px;'><tr><td><strong>Denominación</strong></td><td style='text-align: right;'><strong>Cantidad</strong></td></tr><tr><td>$100.000</td><td style='text-align: right;'>" . number_format($data['bills_100k']) . "</td></tr><tr><td>$50.000</td><td style='text-align: right;'>" . number_format($data['bills_50k']) . "</td></tr><tr><td>$20.000</td><td style='text-align: right;'>" . number_format($data['bills_20k']) . "</td></tr><tr><td>$10.000</td><td style='text-align: right;'>" . number_format($data['bills_10k']) . "</td></tr><tr><td>$5.000</td><td style='text-align: right;'>" . number_format($data['bills_5k']) . "</td></tr><tr><td>$2.000</td><td style='text-align: right;'>" . number_format($data['bills_2k']) . "</td></tr><tr><td>Monedas</td><td style='text-align: right;'>$ " . number_format($data['coins']) . "</td></tr></table><h2>Totales</h2><ul><li><strong>Total Contado:</strong> $" . number_format($data['total_counted']) . "</li><li><strong>Discrepancia:</strong> <strong style='color: " . ($data['discrepancy'] != 0 ? 'red' : 'green') . ";'>$" . number_format($data['discrepancy']) . "</strong></li></ul><p><strong>Observaciones del Operador:</strong> " . (!empty($data['observations']) ? htmlspecialchars($data['observations']) : 'N/A') . "</p><br><p><em>Este es un correo automático del sistema EAGLE 3.0.</em></p>";
+
+                    foreach ($recipients as $recipient) {
+                        send_task_email($recipient['email'], $recipient['name'], $email_subject, $email_body);
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Log del error de correo sin afectar al cliente
+            error_log("Error al enviar correo de notificación de conteo: " . $e->getMessage());
+        }
 
     } catch (Exception $e) {
         $conn->rollback();
+        // Solo enviar error si falla la transacción de la BD
+        http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Error en la base de datos: ' . $e->getMessage()]);
     }
 }

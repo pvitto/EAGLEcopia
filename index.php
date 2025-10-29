@@ -7,7 +7,7 @@ require 'db_connection.php'; // This should define $conn and connection details
 
 // --- Cargar datos iniciales ---
 $all_users = [];
-$users_result = $conn->query("SELECT id, name, role, email, gender, whatsapp FROM users ORDER BY name ASC");
+$users_result = $conn->query("SELECT id, name, role, email, gender FROM users ORDER BY name ASC");
 if ($users_result) { while ($row = $users_result->fetch_assoc()) { $all_users[] = $row; } }
 $admin_users_list = ($_SESSION['user_role'] === 'Admin') ? $all_users : [];
 
@@ -457,6 +457,16 @@ $conn->close();
 .toast.toast-baja { border-left-color: #6b7280; /* gray-500 */ }
 .toast.toast-success { border-left-color: #22c55e; } /* green-500 */
 .toast.toast-error { border-left-color: #ef4444; } /* red-500 */
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20; /* Ensure it's on top of the form */
+    border-radius: 0.375rem; /* rounded-md */
+}
     
     </style>
 </head>
@@ -470,7 +480,6 @@ $conn->close();
                     <input type="hidden" id="user-id" name="id">
                     <div><label for="user-name" class="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label><input type="text" id="user-name" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
                     <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
-                    <div><label for="user-whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label><input type="text" id="user-whatsapp" name="whatsapp" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label for="user-role" class="block text-sm font-medium text-gray-700 mb-1">Rol</label><select id="user-role" name="role" class="w-full px-3 py-2 border border-gray-300 rounded-md" required><option value="Operador">Operador</option><option value="Checkinero">Checkinero</option><option value="Digitador">Digitador</option><option value="Admin">Admin</option></select></div>
                     <div>
                         <label for="user-gender" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
@@ -850,7 +859,7 @@ $can_complete = $user_can_act && $task_is_active;
                      <h3 class="text-xl font-semibold mb-4">Buscar Planilla para Detallar</h3>
                      <form id="consultation-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center"><label class="block text-sm font-medium">Nro Planilla<input type="text" id="consult-invoice" required class="mt-1 w-full p-2 border rounded-md"></label><div class="pt-6"><button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Consultar</button></div></form>
                 </div>
-                <div id="operator-panel" class="hidden"><div class="bg-white p-6 rounded-xl shadow-lg mb-8"><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-4 border-b"><div><span class="block text-sm text-gray-500">Nro Planilla</span><strong id="display-invoice" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Nro Sello</span><strong id="display-seal" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Cliente</span><strong id="display-client" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Valor Declarado</span><strong id="display-declared" class="text-lg text-blue-600"></strong></div></div><h3 class="text-xl font-semibold mb-4">Detalle de Denominación</h3><form id="denomination-form"><input type="hidden" id="op-checkin-id"><div class="space-y-2"><?php $denominations = [100000, 50000, 20000, 10000, 5000, 2000]; foreach($denominations as $value): ?><div class="grid grid-cols-5 gap-4 items-center denomination-row" data-value="<?php echo $value; ?>"><div class="col-span-2 font-medium text-gray-700"><?php echo '$' . number_format($value, 0, ',', '.'); ?></div><div class="col-span-2 flex items-center"><button type="button" class="px-3 py-1 bg-gray-200 rounded-l-md font-bold text-lg" onclick="updateQty(this, -1)">-</button><input type="number" value="0" min="0" class="w-full text-center border-t border-b p-1 denomination-qty" oninput="calculateTotals()"><button type="button" class="px-3 py-1 bg-gray-200 rounded-r-md font-bold text-lg" onclick="updateQty(this, 1)">+</button></div><div class="text-right font-mono subtotal">$ 0</div></div><?php endforeach; ?><div class="grid grid-cols-5 gap-4 items-center pt-2 border-t"><div class="col-span-2 font-medium text-gray-700">Monedas</div><div class="col-span-2"><input type="number" id="coins-value" value="0" min="0" step="50" class="w-full border p-1" oninput="calculateTotals()" placeholder="Valor total en monedas"></div><div class="text-right font-mono" id="coins-subtotal">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center pt-4 mt-4 border-t-2"><div class="col-span-2 font-bold text-xl">Total</div><div class="col-span-3 text-right font-mono text-xl" id="total-counted">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center"><div class="col-span-2 font-bold text-xl">Diferencia</div><div class="col-span-3 text-right font-mono text-xl" id="discrepancy">$ 0</div></div></div><div class="mt-6"><label for="observations" class="block text-sm font-medium">Observación</label><textarea id="observations" rows="3" class="mt-1 w-full border rounded-md p-2"></textarea></div><div class="mt-6 flex justify-end"><button type="submit" class="bg-green-600 text-white font-bold py-3 px-6 rounded-md hover:bg-green-700">Guardar y Cerrar</button></div></form></div></div>
+                <div id="operator-panel" class="hidden"><div class="bg-white p-6 rounded-xl shadow-lg mb-8 relative"><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-4 border-b"><div><span class="block text-sm text-gray-500">Nro Planilla</span><strong id="display-invoice" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Nro Sello</span><strong id="display-seal" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Cliente</span><strong id="display-client" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Valor Declarado</span><strong id="display-declared" class="text-lg text-blue-600"></strong></div></div><h3 class="text-xl font-semibold mb-4">Detalle de Denominación</h3><form id="denomination-form"><input type="hidden" id="op-checkin-id"><div class="space-y-2"><?php $denominations = [100000, 50000, 20000, 10000, 5000, 2000]; foreach($denominations as $value): ?><div class="grid grid-cols-5 gap-4 items-center denomination-row" data-value="<?php echo $value; ?>"><div class="col-span-2 font-medium text-gray-700"><?php echo '$' . number_format($value, 0, ',', '.'); ?></div><div class="col-span-2 flex items-center"><button type="button" class="px-3 py-1 bg-gray-200 rounded-l-md font-bold text-lg" onclick="updateQty(this, -1)">-</button><input type="number" value="0" min="0" class="w-full text-center border-t border-b p-1 denomination-qty" oninput="calculateTotals()"><button type="button" class="px-3 py-1 bg-gray-200 rounded-r-md font-bold text-lg" onclick="updateQty(this, 1)">+</button></div><div class="text-right font-mono subtotal">$ 0</div></div><?php endforeach; ?><div class="grid grid-cols-5 gap-4 items-center pt-2 border-t"><div class="col-span-2 font-medium text-gray-700">Monedas</div><div class="col-span-2"><input type="number" id="coins-value" value="0" min="0" step="50" class="w-full border p-1" oninput="calculateTotals()" placeholder="Valor total en monedas"></div><div class="text-right font-mono" id="coins-subtotal">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center pt-4 mt-4 border-t-2"><div class="col-span-2 font-bold text-xl">Total</div><div class="col-span-3 text-right font-mono text-xl" id="total-counted">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center"><div class="col-span-2 font-bold text-xl">Diferencia</div><div class="col-span-3 text-right font-mono text-xl" id="discrepancy">$ 0</div></div></div><div class="mt-6"><label for="observations" class="block text-sm font-medium">Observación</label><textarea id="observations" rows="3" class="mt-1 w-full border rounded-md p-2"></textarea></div><div class="mt-6 flex justify-end"><button type="submit" class="bg-green-600 text-white font-bold py-3 px-6 rounded-md hover:bg-green-700">Guardar y Cerrar</button></div><div id="loading-overlay" class="loading-overlay hidden"><div class="loader"></div></div></form></div></div>
                 <?php if ($_SESSION['user_role'] === 'Admin'): ?><div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Planillas Pendientes de Detallar (Admin)</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"></thead><tbody id="operator-checkins-table-body"></tbody></table></div></div><?php endif; ?>
                 <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial de Conteos Realizados</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Cliente</th><th class="p-3">Valor Declarado</th><th class="p-3">Valor Contado</th><th class="p-3">Discrep.</th><?php if (in_array($_SESSION['user_role'], ['Admin', 'Digitador'])): ?><th class="p-3">Operador</th><?php endif; ?><th class="p-3">Fecha</th><th class="p-3">Obs.</th><?php if ($_SESSION['user_role'] === 'Admin'): ?><th class="p-3">Acciones</th><?php endif; ?></tr></thead><tbody id="operator-history-table-body"></tbody></table></div></div>
             </div>
@@ -1024,7 +1033,7 @@ $can_complete = $user_can_act && $task_is_active;
             </div>
 
             <?php if ($_SESSION['user_role'] === 'Admin'): ?>
-            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">WhatsApp</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
+            <div id="content-roles" class="hidden"><div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">Gestionar Usuarios</h2><button onclick="openModal()" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Agregar Usuario</button></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><table class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Nombre</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Rol</th><th class="px-6 py-3 text-center">Sexo</th><th class="px-6 py-3 text-center">Acciones</th></tr></thead><tbody id="user-table-body"></tbody></table></div></div>
             <div id="content-trazabilidad" class="hidden"><h2 class="text-xl font-bold text-gray-900 mb-4">Trazabilidad de Tareas Completadas</h2><div class="bg-white p-4 rounded-xl shadow-sm mb-6"><div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4"><div><label for="filter-start-date" class="text-sm">F. Inicio</label><input type="date" id="filter-start-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-end-date" class="text-sm">F. Fin</label><input type="date" id="filter-end-date" class="mt-1 w-full p-2 border rounded-md text-sm"></div><div><label for="filter-user" class="text-sm">Asignado a</label><select id="filter-user" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-checker" class="text-sm">Check por</label><select id="filter-checker" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todos</option><?php foreach($all_users as $user): ?><option value="<?php echo htmlspecialchars($user['name']); ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select></div><div><label for="filter-priority" class="text-sm">P. Final</label><select id="filter-priority" class="mt-1 w-full p-2 border rounded-md text-sm"><option value="">Todas</option><option value="Alta">Alta</option><option value="Media">Media</option><option value="Baja">Baja</option></select></div><div class="flex items-end space-x-2"><button onclick="applyTrazabilidadFilters()" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md">Filtrar</button><button onclick="exportToExcel()" class="w-full bg-green-600 text-white font-semibold py-2 px-4 rounded-md">Excel</button></div></div></div><div class="bg-white rounded-xl shadow-sm overflow-hidden"><div class="overflow-x-auto"><table id="trazabilidad-table" class="w-full text-sm"><thead class="bg-gray-50"><tr class="text-left"><th class="px-6 py-3">Tarea</th><th class="px-6 py-3">Desc.</th><th class="px-6 py-3">P. Ini.</th><th class="px-6 py-3">P. Fin.</th><th class="px-6 py-3 sortable" data-column-name="created_at" onclick="sortTableByDate('created_at')">H. Inicio <span></span></th><th class="px-6 py-3 sortable" data-column-name="completed_at" onclick="sortTableByDate('completed_at')">H. Fin <span></span></th><th class="px-6 py-3">T. Resp.</th><th class="px-6 py-3">Asig. a</th><th class="px-6 py-3">Asig. por</th><th class="px-6 py-3">Check por</th><th class="px-6 py-3">Obs. Cierre</th><th class="px-6 py-3">Acciones</th></tr></thead><tbody id="trazabilidad-tbody"></tbody></table></div></div></div>
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-routes" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
@@ -1040,6 +1049,7 @@ $can_complete = $user_can_act && $task_is_active;
     const adminUsersData = <?php echo json_encode($admin_users_list); ?>;
     const currentUserId = <?php echo $current_user_id; ?>;
     const currentUserRole = '<?php echo $current_user_role; ?>';
+    const currentUserName = '<?php echo htmlspecialchars($_SESSION['user_name'], ENT_QUOTES, 'UTF-8'); ?>';
     const apiUrlBase = 'api'; // Base para APIs normales
     const apiRealtimeBase = 'api/realtime'; // --- NUEVO: Base para APIs de tiempo real ---
     const initialCheckins = <?php echo json_encode($initial_checkins); ?>;
@@ -1692,6 +1702,9 @@ async function handleCheckinSubmit(event) {
     }
     async function handleDenominationSave(event) {
         event.preventDefault();
+        const loadingOverlay = document.getElementById('loading-overlay');
+        loadingOverlay.classList.remove('hidden');
+
         const payload = {
             check_in_id: document.getElementById('op-checkin-id').value,
             bills_100k: parseInt(document.querySelector('#denomination-form [data-value="100000"] .denomination-qty').value) || 0,
@@ -1710,16 +1723,115 @@ async function handleCheckinSubmit(event) {
         try {
             const response = await fetch('api/operator_api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const result = await response.json();
+
             if (result.success) {
-                 showToast(result.message || 'Conteo guardado correctamente.', 'success'); 
-                 pollAlerts();
-                 setTimeout(() => {
-                    location.reload();
-                 }, 1000); // 1000ms = 1 segundo (para que el toast se alcance a leer)
-                }else {showToast(result.error || 'Error al guardar el conteo', 'error'); // ...por esto.
+                showToast(result.message || 'Conteo guardado correctamente.', 'success');
+                pollAlerts();
+
+                // 1. Ocultar y resetear el panel del operador
+                document.getElementById('operator-panel').classList.add('hidden');
+                document.getElementById('denomination-form').reset();
+                calculateTotals();
+
+                // 2. Añadir el nuevo registro a la tabla de historial
+                const historyTbody = document.getElementById('operator-history-table-body');
+                if (historyTbody) {
+                    const noRecordsRow = historyTbody.querySelector('td[colspan]');
+                    if (noRecordsRow) noRecordsRow.parentElement.remove();
+
+                    const newItem = {
+                        check_in_id: payload.check_in_id,
+                        invoice_number: document.getElementById('display-invoice').textContent,
+                        client_name: document.getElementById('display-client').textContent,
+                        declared_value: parseFloat(document.getElementById('display-declared').dataset.value) || 0,
+                        total_counted: payload.total_counted,
+                        discrepancy: payload.discrepancy,
+                        operator_name: window.currentUserName,
+                        count_date: new Date().toISOString(),
+                        observations: payload.observations
+                    };
+
+                    const discrepancyClass = newItem.discrepancy != 0 ? 'text-red-600 font-bold' : 'text-green-600';
+                    const showOperatorColumn = (currentUserRole === 'Admin' || currentUserRole === 'Digitador');
+                    const operatorColumn = showOperatorColumn ? `<td class="p-3">${newItem.operator_name}</td>` : '';
+                    const adminDeleteButton = currentUserRole === 'Admin' ? `<td class="p-3 text-center"><button onclick="deleteCheckIn(${newItem.check_in_id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
+
+                    const newRowHtml = `
+                        <tr class="border-b" style="background-color: #fefce8;">
+                            <td class="p-3 font-mono">${newItem.invoice_number}</td>
+                            <td class="p-3">${newItem.client_name}</td>
+                            <td class="p-3 text-right">${formatCurrency(newItem.declared_value)}</td>
+                            <td class="p-3 text-right">${formatCurrency(newItem.total_counted)}</td>
+                            <td class="p-3 text-right ${discrepancyClass}">${formatCurrency(newItem.discrepancy)}</td>
+                            ${operatorColumn}
+                            <td class="p-3 text-xs whitespace-nowrap">${new Date(newItem.count_date).toLocaleString('es-CO')}</td>
+                            <td class="p-3 text-xs max-w-xs truncate" title="${newItem.observations || ''}">${newItem.observations || 'N/A'}</td>
+                            ${adminDeleteButton}
+                        </tr>`;
+
+                    historyTbody.insertAdjacentHTML('afterbegin', newRowHtml);
+                    setTimeout(() => {
+                        const newRow = historyTbody.querySelector('tr[style]');
+                        if (newRow) newRow.style.backgroundColor = '';
+                    }, 3000);
+                }
+
+                // 3. Eliminar la planilla de la tabla de pendientes (si es visible para el Admin)
+                const pendingRowToRemove = document.getElementById(`operator-pending-row-${payload.check_in_id}`);
+                if (pendingRowToRemove) {
+                    pendingRowToRemove.remove();
+                    const pendingTbody = document.getElementById('operator-checkins-table-body');
+                    if (pendingTbody && pendingTbody.children.length === 0) {
+                        pendingTbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">No hay planillas pendientes por detallar.</td></tr>';
+                    }
+                }
+                 // También se actualiza la tabla de historial para el digitador.
+                const digitadorHistoryTbody = document.getElementById('digitador-operator-history-tbody');
+                if(digitadorHistoryTbody) {
+                    const noRecordsRow = digitadorHistoryTbody.querySelector('td[colspan]');
+                    if (noRecordsRow) noRecordsRow.parentElement.remove();
+
+                    const newItem = {
+                        check_in_id: payload.check_in_id,
+                        invoice_number: document.getElementById('display-invoice').textContent,
+                        client_name: document.getElementById('display-client').textContent,
+                        declared_value: parseFloat(document.getElementById('display-declared').dataset.value) || 0,
+                        total_counted: payload.total_counted,
+                        discrepancy: payload.discrepancy,
+                        operator_name: window.currentUserName,
+                        count_date: new Date().toISOString(),
+                        observations: payload.observations
+                    };
+                     const discrepancyClass = newItem.discrepancy != 0 ? 'text-red-600 font-bold' : 'text-green-600';
+                     const newRowHtml = `
+                        <tr class="border-b" style="background-color: #fefce8;">
+                            <td class="p-3 font-mono">${newItem.invoice_number}</td>
+                            <td class="p-3">${newItem.client_name}</td>
+                            <td class="p-3 text-right">${formatCurrency(newItem.declared_value)}</td>
+                            <td class="p-3 text-right">${formatCurrency(newItem.total_counted)}</td>
+                            <td class="p-3 text-right ${discrepancyClass}">${formatCurrency(newItem.discrepancy)}</td>
+                            <td class="p-3">${newItem.operator_name}</td>
+                            <td class="p-3 text-xs whitespace-nowrap">${new Date(newItem.count_date).toLocaleString('es-CO')}</td>
+                            <td class="p-3 text-xs max-w-xs truncate" title="${newItem.observations || ''}">${newItem.observations || 'N/A'}</td>
+                        </tr>`;
+
+                    digitadorHistoryTbody.insertAdjacentHTML('afterbegin', newRowHtml);
+                     setTimeout(() => {
+                        const newRow = digitadorHistoryTbody.querySelector('tr[style]');
+                        if (newRow) newRow.style.backgroundColor = '';
+                    }, 3000);
+                }
+
+
+            } else {
+                showToast(result.error || 'Error al guardar el conteo', 'error');
+            }
+        } catch (error) {
+            console.error('Error al guardar conteo:', error);
+            showToast('Error de conexión al guardar conteo', 'error');
+        } finally {
+            loadingOverlay.classList.add('hidden');
         }
-        } catch (error) { console.error('Error al guardar conteo:', error);
-             showToast('Error de conexión al guardar conteo', 'error'); }
     }
 
 
@@ -2022,7 +2134,6 @@ async function handleCheckinSubmit(event) {
             userIdInput.value = user.id;
             document.getElementById('user-name').value = user.name;
             document.getElementById('user-email').value = user.email;
-            document.getElementById('user-whatsapp').value = user.whatsapp || '';
             document.getElementById('user-role').value = user.role;
             document.getElementById('user-gender').value = user.gender || ''; // Usar '' si es null
             userPasswordInput.required = false;
@@ -2044,7 +2155,7 @@ async function handleCheckinSubmit(event) {
         }
         tbody.innerHTML = '';
         if (!users || users.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 6
+             tbody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-gray-500">No hay usuarios registrados.</td></tr>'; // Colspan a 5
              return;
         }
         users.forEach(user => {
@@ -2056,7 +2167,6 @@ async function handleCheckinSubmit(event) {
                 id: user.id,
                 name: user.name || '',
                 email: user.email || '',
-                whatsapp: user.whatsapp || '',
                 role: user.role || '',
                 gender: user.gender || ''
             };
@@ -2066,7 +2176,6 @@ async function handleCheckinSubmit(event) {
                 <tr id="user-row-${safeUser.id}">
                     <td class="px-6 py-4">${safeUser.name}</td>
                     <td class="px-6 py-4">${safeUser.email}</td>
-                    <td class="px-6 py-4">${safeUser.whatsapp}</td>
                     <td class="px-6 py-4"><span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">${displayRole}</span></td>
                     <td class="px-6 py-4 text-center">${safeUser.gender || 'N/A'}</td> <td class="px-6 py-4 text-center">
                         <button onclick='openModal(${userJson})' class="font-medium text-blue-600 hover:text-blue-800">Editar</button>
