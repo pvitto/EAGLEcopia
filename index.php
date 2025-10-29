@@ -457,44 +457,6 @@ $conn->close();
 .toast.toast-baja { border-left-color: #6b7280; /* gray-500 */ }
 .toast.toast-success { border-left-color: #22c55e; } /* green-500 */
 .toast.toast-error { border-left-color: #ef4444; } /* red-500 */
-.loading-overlay {
-    position: absolute;
-    inset: 0;
-    background-color: rgba(255, 255, 255, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20; /* Ensure it's on top of the form */
-    border-radius: 0.375rem; /* rounded-md */
-}
-.progress-bar-container {
-    width: 80%;
-    background-color: #e9ecef;
-    border-radius: 0.375rem;
-    overflow: hidden;
-    height: 2.5rem;
-    display: flex;
-    align-items: center;
-    position: relative;
-    border: 1px solid #ced4da;
-}
-.progress-bar {
-    background-color: #0d6efd;
-    height: 100%;
-    width: 0%;
-    transition: width 0.1s linear;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.progress-bar-text {
-    position: absolute;
-    width: 100%;
-    text-align: center;
-    font-weight: bold;
-    color: #495057;
-    text-shadow: 0 0 2px white;
-}
     
     </style>
 </head>
@@ -507,7 +469,7 @@ $conn->close();
                 <form id="user-form" class="mt-6 space-y-4">
                     <input type="hidden" id="user-id" name="id">
                     <div><label for="user-name" class="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label><input type="text" id="user-name" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
-                    <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                    <div><label for="user-email" class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="user-email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md" required></div>
                     <div><label for="user-role" class="block text-sm font-medium text-gray-700 mb-1">Rol</label><select id="user-role" name="role" class="w-full px-3 py-2 border border-gray-300 rounded-md" required><option value="Operador">Operador</option><option value="Checkinero">Checkinero</option><option value="Digitador">Digitador</option><option value="Admin">Admin</option></select></div>
                     <div>
                         <label for="user-gender" class="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
@@ -636,6 +598,7 @@ $conn->close();
                    <button id="tab-manage-routes" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-routes')">Gestionar Rutas</button>
                    <button id="tab-manage-funds" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-funds')">Gestionar Fondos</button>
                    <button id="tab-trazabilidad" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('trazabilidad')">Trazabilidad</button>
+                   <button id="tab-formulario" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('formulario')">Formulario General</button>
                <?php endif; ?>
            </div></div>
        </nav>
@@ -719,12 +682,12 @@ $can_complete = $user_can_act && $task_is_active;
                                      <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                      <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                      <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Confirmar</button>
+                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                 </div>
                                 <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                      <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                      <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                     <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
+                                     <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
                                 </div>
                             </div>
                         <?php endforeach; endif; ?>
@@ -738,17 +701,7 @@ $can_complete = $user_can_act && $task_is_active;
                     <div class="space-y-8">
                         <div class="bg-white p-6 rounded-xl shadow-sm">
                             <h2 class="text-lg font-semibold text-gray-900 mb-4">Crear Tarea Manual</h2>
-                            <form id="manual-task-form" class="space-y-3">
-                                <div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                <div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div>
-                                <div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                    <div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                </div>
-                                <div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div>
-                                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Crear Tarea</button>
-                            </form>
+                            <form id="manual-task-form" class="space-y-3"><div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div><div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div><div class="grid grid-cols-2 gap-4"><div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div></div><div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div><button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-md">Crear Tarea</button></form>
                         </div>
 
                         <div class="bg-white p-6 rounded-xl shadow-sm">
@@ -818,12 +771,12 @@ $can_complete = $user_can_act && $task_is_active;
                                             <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                             <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                             <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Confirmar</button>
+                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                         </div>
                                         <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                             <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                             <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                            <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
+                                            <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
                                         </div>
                                     </div>
                                 <?php endforeach; endif; ?>
@@ -887,13 +840,7 @@ $can_complete = $user_can_act && $task_is_active;
                      <h3 class="text-xl font-semibold mb-4">Buscar Planilla para Detallar</h3>
                      <form id="consultation-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center"><label class="block text-sm font-medium">Nro Planilla<input type="text" id="consult-invoice" required class="mt-1 w-full p-2 border rounded-md"></label><div class="pt-6"><button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Consultar</button></div></form>
                 </div>
-                <div id="operator-panel" class="hidden"><div class="bg-white p-6 rounded-xl shadow-lg mb-8 relative"><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-4 border-b"><div><span class="block text-sm text-gray-500">Nro Planilla</span><strong id="display-invoice" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Nro Sello</span><strong id="display-seal" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Cliente</span><strong id="display-client" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Valor Declarado</span><strong id="display-declared" class="text-lg text-blue-600"></strong></div></div><h3 class="text-xl font-semibold mb-4">Detalle de Denominación</h3><form id="denomination-form"><input type="hidden" id="op-checkin-id"><div class="space-y-2"><?php $denominations = [100000, 50000, 20000, 10000, 5000, 2000]; foreach($denominations as $value): ?><div class="grid grid-cols-5 gap-4 items-center denomination-row" data-value="<?php echo $value; ?>"><div class="col-span-2 font-medium text-gray-700"><?php echo '$' . number_format($value, 0, ',', '.'); ?></div><div class="col-span-2 flex items-center"><button type="button" class="px-3 py-1 bg-gray-200 rounded-l-md font-bold text-lg" onclick="updateQty(this, -1)">-</button><input type="number" value="0" min="0" class="w-full text-center border-t border-b p-1 denomination-qty" oninput="calculateTotals()"><button type="button" class="px-3 py-1 bg-gray-200 rounded-r-md font-bold text-lg" onclick="updateQty(this, 1)">+</button></div><div class="text-right font-mono subtotal">$ 0</div></div><?php endforeach; ?><div class="grid grid-cols-5 gap-4 items-center pt-2 border-t"><div class="col-span-2 font-medium text-gray-700">Monedas</div><div class="col-span-2"><input type="number" id="coins-value" value="0" min="0" step="50" class="w-full border p-1" oninput="calculateTotals()" placeholder="Valor total en monedas"></div><div class="text-right font-mono" id="coins-subtotal">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center pt-4 mt-4 border-t-2"><div class="col-span-2 font-bold text-xl">Total</div><div class="col-span-3 text-right font-mono text-xl" id="total-counted">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center"><div class="col-span-2 font-bold text-xl">Diferencia</div><div class="col-span-3 text-right font-mono text-xl" id="discrepancy">$ 0</div></div></div><div class="mt-6"><label for="observations" class="block text-sm font-medium">Observación</label><textarea id="observations" rows="3" class="mt-1 w-full border rounded-md p-2"></textarea></div><div class="mt-6 flex justify-end"><button type="submit" class="bg-green-600 text-white font-bold py-3 px-6 rounded-md hover:bg-green-700">Guardar y Cerrar</button></div><div id="loading-overlay" class="loading-overlay hidden">
-    <div class="progress-bar-container">
-        <div id="progress-bar" class="progress-bar"></div>
-        <span id="progress-bar-text" class="progress-bar-text">0%</span>
-    </div>
-</div>
-</form></div></div>
+                <div id="operator-panel" class="hidden"><div class="bg-white p-6 rounded-xl shadow-lg mb-8"><div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 pb-4 border-b"><div><span class="block text-sm text-gray-500">Nro Planilla</span><strong id="display-invoice" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Nro Sello</span><strong id="display-seal" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Cliente</span><strong id="display-client" class="text-lg"></strong></div><div><span class="block text-sm text-gray-500">Valor Declarado</span><strong id="display-declared" class="text-lg text-blue-600"></strong></div></div><h3 class="text-xl font-semibold mb-4">Detalle de Denominación</h3><form id="denomination-form"><input type="hidden" id="op-checkin-id"><div class="space-y-2"><?php $denominations = [100000, 50000, 20000, 10000, 5000, 2000]; foreach($denominations as $value): ?><div class="grid grid-cols-5 gap-4 items-center denomination-row" data-value="<?php echo $value; ?>"><div class="col-span-2 font-medium text-gray-700"><?php echo '$' . number_format($value, 0, ',', '.'); ?></div><div class="col-span-2 flex items-center"><button type="button" class="px-3 py-1 bg-gray-200 rounded-l-md font-bold text-lg" onclick="updateQty(this, -1)">-</button><input type="number" value="0" min="0" class="w-full text-center border-t border-b p-1 denomination-qty" oninput="calculateTotals()"><button type="button" class="px-3 py-1 bg-gray-200 rounded-r-md font-bold text-lg" onclick="updateQty(this, 1)">+</button></div><div class="text-right font-mono subtotal">$ 0</div></div><?php endforeach; ?><div class="grid grid-cols-5 gap-4 items-center pt-2 border-t"><div class="col-span-2 font-medium text-gray-700">Monedas</div><div class="col-span-2"><input type="number" id="coins-value" value="0" min="0" step="50" class="w-full border p-1" oninput="calculateTotals()" placeholder="Valor total en monedas"></div><div class="text-right font-mono" id="coins-subtotal">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center pt-4 mt-4 border-t-2"><div class="col-span-2 font-bold text-xl">Total</div><div class="col-span-3 text-right font-mono text-xl" id="total-counted">$ 0</div></div><div class="grid grid-cols-5 gap-4 items-center"><div class="col-span-2 font-bold text-xl">Diferencia</div><div class="col-span-3 text-right font-mono text-xl" id="discrepancy">$ 0</div></div></div><div class="mt-6"><label for="observations" class="block text-sm font-medium">Observación</label><textarea id="observations" rows="3" class="mt-1 w-full border rounded-md p-2"></textarea></div><div class="mt-6 flex justify-end"><button type="submit" class="bg-green-600 text-white font-bold py-3 px-6 rounded-md hover:bg-green-700">Guardar y Cerrar</button></div></form></div></div>
                 <?php if ($_SESSION['user_role'] === 'Admin'): ?><div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Planillas Pendientes de Detallar (Admin)</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"></thead><tbody id="operator-checkins-table-body"></tbody></table></div></div><?php endif; ?>
                 <div class="bg-white p-6 rounded-xl shadow-lg mt-8"><h3 class="text-xl font-semibold mb-4">Historial de Conteos Realizados</h3><div class="overflow-auto max-h-[600px]"><table class="w-full text-sm text-left"><thead class="bg-gray-50 sticky top-0"><tr><th class="p-3">Planilla</th><th class="p-3">Cliente</th><th class="p-3">Valor Declarado</th><th class="p-3">Valor Contado</th><th class="p-3">Discrep.</th><?php if (in_array($_SESSION['user_role'], ['Admin', 'Digitador'])): ?><th class="p-3">Operador</th><?php endif; ?><th class="p-3">Fecha</th><th class="p-3">Obs.</th><?php if ($_SESSION['user_role'] === 'Admin'): ?><th class="p-3">Acciones</th><?php endif; ?></tr></thead><tbody id="operator-history-table-body"></tbody></table></div></div>
             </div>
@@ -904,113 +851,71 @@ $can_complete = $user_can_act && $task_is_active;
                     <h2 class="text-2xl font-bold text-gray-900">Módulo de Digitador: Gestión de Cierre e Informes</h2>
                 </div>
 
-                <style>
-                    .carousel-container {
-                        scroll-behavior: smooth;
-                        scrollbar-width: none; /* Firefox */
-                    }
-                    .carousel-container::-webkit-scrollbar {
-                        display: none; /* Safari and Chrome */
-                    }
-                </style>
-                <div class="mb-8">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold text-gray-900">Alertas y Tareas Prioritarias</h2>
-                        <div class="flex space-x-2">
-                            <button id="carousel-prev" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-                            </button>
-                            <button id="carousel-next" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="digitador-carousel" class="carousel-container flex overflow-x-auto space-x-4 pb-4">
-                        <?php if (empty($main_priority_items)): ?>
-                            <p class="text-sm text-gray-500 bg-white p-4 rounded-lg shadow-sm w-full text-center">No hay items prioritarios pendientes.</p>
-                        <?php else: foreach ($main_priority_items as $item): ?>
-                            <?php
-                                // Same PHP logic as before to prepare variables
-                                $is_manual = $item['item_type'] === 'manual_task';
-                                $is_group_task = !empty($item['assigned_to_group']);
-                                $assigned_names = $item['assigned_names'] ?? null;
-                                $task_id_to_use = $item['user_task_id'] ?? $item['task_id'] ?? $item['id'];
-                                $alert_id_or_null = $is_manual ? 'null' : ($item['id'] ?? 'null');
-                                $form_id_prefix = 'd-'.$task_id_to_use; // Prefix to avoid ID clashes with general panel
-                                $is_admin = $current_user_role === 'Admin';
-                                $is_assigned_individually = !empty($item['user_task_id']);
-                                $is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
-                                $user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
-                                $task_is_active = (isset($item['task_status']) && in_array($item['task_status'], ['Pendiente','Media','Alta','Crítica'])) || !isset($item['task_status']);
-                                $can_complete = $user_can_act && $task_is_active;
-                                $priority_to_use = $item['current_priority'];
-                                $color_map = ['Critica' => ['bg' => 'bg-red-100', 'border' => 'border-red-500', 'text' => 'text-red-800', 'badge' => 'bg-red-200'],'Alta' => ['bg' => 'bg-orange-100', 'border' => 'border-orange-500', 'text' => 'text-orange-800', 'badge' => 'bg-orange-200']];
-                                $color = $color_map[$priority_to_use] ?? ['bg' => 'bg-gray-100', 'border' => 'border-gray-400', 'text' => 'text-gray-800', 'badge' => 'bg-gray-200'];
-                            ?>
-                            <div class="flex-none w-96">
-                                <div class="bg-white rounded-lg shadow-md overflow-hidden task-card h-full flex flex-col" data-task-id="<?php echo $task_id_to_use; ?>">
-                                    <div class="p-4 <?php echo $color['bg']; ?> border-l-8 <?php echo $color['border']; ?> flex-grow">
-                                        <div class="flex justify-between items-start">
-                                            <p class="font-semibold <?php echo $color['text']; ?> text-lg">
-                                                <?php echo ($is_manual ? 'Tarea: ' : '') . htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?>
-                                                <?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600 text-sm">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span> <?php endif; ?>
-                                                <span class="ml-2 <?php echo $color['badge'].' '.$color['text']; ?> text-xs font-bold px-2 py-0.5 rounded-full"><?php echo strtoupper($priority_to_use); ?></span>
-                                            </p>
-                                            <?php if ($can_complete): ?>
-                                                <button onclick="toggleForm('complete-form-<?php echo $form_id_prefix; ?>', this)" class="p-1 bg-green-200 text-green-700 rounded-full hover:bg-green-300 ml-auto" title="Marcar como completada"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
-                                            <?php endif; ?>
-                                        </div>
-                                        <p class="text-sm mt-1"><?php echo htmlspecialchars($is_manual ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
-                                        <?php if (!empty($item['end_datetime'])): ?> <div class="countdown-timer text-sm font-bold mt-2" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div> <?php endif; ?>
-                                        <div class="mt-4 flex items-center space-x-4 border-t pt-3">
-                                            <button onclick="toggleForm('assign-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-blue-600 hover:text-blue-800"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?></button>
-                                            <button onclick="toggleForm('reminder-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-gray-600 hover:text-gray-800">Recordatorio</button>
-                                            <div class="flex-grow text-right text-sm">
-                                                <?php if($is_group_task): ?> <span class="font-semibold text-purple-700">Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></span>
-                                                <?php elseif (!empty($assigned_names)): ?> <span class="font-semibold text-green-700"><?php echo htmlspecialchars($assigned_names); ?></span>
-                                                <?php else: ?> <span class="font-semibold text-gray-500">Sin Asignar</span> <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div id="complete-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                        <h4 class="text-sm font-semibold mb-2">Completar Tarea</h4>
-                                        <textarea id="resolution-note-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md" placeholder="Observación de cierre..."></textarea>
-                                        <button type="button" onclick="completeTask(<?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-1 mt-2 rounded-md">Confirmar</button>
-                                    </div>
-                                    <div id="assign-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                        <h4 class="text-sm font-semibold mb-2">Asignar Tarea</h4>
-                                        <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></optgroup></select>
-                                        <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                        <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-1 mt-2 rounded-md">Confirmar</button>
-                                    </div>
-                                    <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
-                                        <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
-                                        <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                        <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-1 mt-2 rounded-md">Crear</button>
+                <div class="lg:col-span-2 space-y-4 mb-8">
+                    <h2 class="text-xl font-bold text-gray-900">Alertas y Tareas Prioritarias</h2>
+                    <?php if (empty($main_priority_items)): ?>
+                        <p class="text-sm text-gray-500 bg-white p-4 rounded-lg shadow-sm">No hay items prioritarios pendientes.</p>
+                    <?php else: foreach ($main_priority_items as $item): ?>
+                        <?php
+                            $is_manual = $item['item_type'] === 'manual_task';
+                            $is_group_task = !empty($item['assigned_to_group']);
+                            $assigned_names = $item['assigned_names'] ?? null;
+                            $task_id_to_use = $item['user_task_id'] ?? $item['task_id'] ?? $item['id']; // Usa el ID específico del usuario si existe
+                            $alert_id_or_null = $is_manual ? 'null' : ($item['id'] ?? 'null');
+                            $form_id_prefix = $task_id_to_use;
+                            $is_admin = $current_user_role === 'Admin';
+                            $is_assigned_individually = !empty($item['user_task_id']);
+                            $is_assigned_to_my_group = $is_group_task && isset($item['assigned_to_group']) && $item['assigned_to_group'] == $current_user_role;
+                            $user_can_act = $is_admin || $is_assigned_individually || $is_assigned_to_my_group;
+                            $task_is_active = (isset($item['task_status']) && in_array($item['task_status'], ['Pendiente','Media','Alta','Crítica'])) || !isset($item['task_status']);
+                            $can_complete = $user_can_act && $task_is_active;
+                            $priority_to_use = $item['current_priority'];
+                            $color_map = ['Critica' => ['bg' => 'bg-red-100', 'border' => 'border-red-500', 'text' => 'text-red-800', 'badge' => 'bg-red-200'],'Alta' => ['bg' => 'bg-orange-100', 'border' => 'border-orange-500', 'text' => 'text-orange-800', 'badge' => 'bg-orange-200']];
+                            $color = $color_map[$priority_to_use] ?? ['bg' => 'bg-gray-100', 'border' => 'border-gray-400', 'text' => 'text-gray-800', 'badge' => 'bg-gray-200'];
+                        ?>
+                        <div class="bg-white rounded-lg shadow-md overflow-hidden task-card" data-task-id="<?php echo $task_id_to_use; ?>">
+                            <div class="p-4 <?php echo $color['bg']; ?> border-l-8 <?php echo $color['border']; ?>">
+                                <div class="flex justify-between items-start">
+                                    <p class="font-semibold <?php echo $color['text']; ?> text-lg">
+                                        <?php echo ($is_manual ? 'Tarea: ' : '') . htmlspecialchars($item['title'] ?? 'Alerta/Tarea'); ?>
+                                        <?php if (!empty($item['invoice_number'])): ?> <span class="font-normal text-blue-600">(Planilla: <?php echo htmlspecialchars($item['invoice_number']); ?>)</span> <?php endif; ?>
+                                        <span class="ml-2 <?php echo $color['badge'].' '.$color['text']; ?> text-xs font-bold px-2 py-0.5 rounded-full"><?php echo strtoupper($priority_to_use); ?></span>
+                                    </p>
+                                    <?php if ($can_complete): ?>
+                                        <button onclick="toggleForm('complete-form-<?php echo $form_id_prefix; ?>', this)" class="p-1 bg-green-200 text-green-700 rounded-full hover:bg-green-300 ml-auto" title="Marcar como completada"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
+                                     <?php endif; ?>
+                                </div>
+                                <p class="text-sm mt-1"><?php echo htmlspecialchars($is_manual ? ($item['instruction'] ?? '') : ($item['description'] ?? '')); ?></p>
+                                <?php if (!empty($item['end_datetime'])): ?> <div class="countdown-timer text-sm font-bold mt-2" data-end-time="<?php echo htmlspecialchars($item['end_datetime']); ?>"></div> <?php endif; ?>
+                                <div class="mt-4 flex items-center space-x-4 border-t pt-3">
+                                     <button onclick="toggleForm('assign-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-blue-600 hover:text-blue-800"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?></button>
+                                    <button onclick="toggleForm('reminder-form-<?php echo $form_id_prefix; ?>', this)" class="text-sm font-medium text-gray-600 hover:text-gray-800">Recordatorio</button>
+                                    <div class="flex-grow text-right text-sm">
+                                        <?php if($is_group_task): ?> <span class="font-semibold text-purple-700">Asignada a: Grupo <?php echo htmlspecialchars(ucfirst($item['assigned_to_group'])); ?></span>
+                                        <?php elseif (!empty($assigned_names)): ?> <span class="font-semibold text-green-700">Asignada a: <?php echo htmlspecialchars($assigned_names); ?></span>
+                                        <?php else: ?> <span class="font-semibold text-gray-500">Pendiente de Asignación</span> <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; endif; ?>
-                    </div>
+                            <div id="complete-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                <h4 class="text-sm font-semibold mb-2">Completar Tarea</h4>
+                                <textarea id="resolution-note-<?php echo $form_id_prefix; ?>" rows="3" class="w-full p-2 text-sm border rounded-md" placeholder="Añadir observación de cierre (obligatorio)..."></textarea>
+                                <button type="button" onclick="completeTask(<?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar Cierre</button>
+                            </div>
+                            <div id="assign-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                 <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
+                                 <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
+                                 <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
+                                 <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
+                            </div>
+                            <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
+                                 <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
+                                 <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
+                                 <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
+                            </div>
+                        </div>
+                    <?php endforeach; endif; ?>
                 </div>
-                <script>
-                    (() => {
-                        const carousel = document.getElementById('digitador-carousel');
-                        const prevBtn = document.getElementById('carousel-prev');
-                        const nextBtn = document.getElementById('carousel-next');
-
-                        if (carousel && prevBtn && nextBtn) {
-                            const scrollAmount = 400; // w-96 (384px) + space-x-4 (1rem = 16px) = 400
-                            prevBtn.addEventListener('click', () => {
-                                carousel.scrollLeft -= scrollAmount;
-                            });
-                            nextBtn.addEventListener('click', () => {
-                                carousel.scrollLeft += scrollAmount;
-                            });
-                        }
-                    })();
-                </script>
                             <div class="mb-8 flex space-x-2">
     <button id="btn-supervision-operador" class="px-4 py-2 text-sm font-semibold rounded-md bg-gray-200 text-gray-700">Abrir llegadas de Operador</button>
     
@@ -1072,6 +977,49 @@ $can_complete = $user_can_act && $task_is_active;
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-routes" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-funds" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
+
+            <div id="content-formulario" class="hidden">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">Formulario General de Captura de Datos</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <form id="google-sheets-form" class="space-y-6">
+                        <h3 class="text-lg font-semibold text-gray-800 border-b pb-2">Sección de Datos Numéricos</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <?php for ($i = 1; $i <= 20; $i++): ?>
+                                <div>
+                                    <label for="campo_numerico_<?php echo $i; ?>" class="block text-sm font-medium text-gray-700">Dato Numérico <?php echo $i; ?></label>
+                                    <input type="number" id="campo_numerico_<?php echo $i; ?>" name="campo_numerico_<?php echo $i; ?>" class="mt-1 w-full p-2 border rounded-md">
+                                </div>
+                            <?php endfor; ?>
+                        </div>
+
+                        <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 pt-4">Sección de Datos de Texto</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <?php for ($i = 1; $i <= 20; $i++): ?>
+                                <div>
+                                    <label for="campo_texto_<?php echo $i; ?>" class="block text-sm font-medium text-gray-700">Información Textual <?php echo $i; ?></label>
+                                    <input type="text" id="campo_texto_<?php echo $i; ?>" name="campo_texto_<?php echo $i; ?>" class="mt-1 w-full p-2 border rounded-md">
+                                </div>
+                            <?php endfor; ?>
+                        </div>
+
+                        <h3 class="text-lg font-semibold text-gray-800 border-b pb-2 pt-4">Sección de Datos Alfanuméricos</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <?php for ($i = 1; $i <= 60; $i++): ?>
+                                <div>
+                                    <label for="campo_alfanumerico_<?php echo $i; ?>" class="block text-sm font-medium text-gray-700">Registro Alfanumérico <?php echo $i; ?></label>
+                                    <input type="text" id="campo_alfanumerico_<?php echo $i; ?>" name="campo_alfanumerico_<?php echo $i; ?>" class="mt-1 w-full p-2 border rounded-md">
+                                </div>
+                            <?php endfor; ?>
+                        </div>
+
+                        <div class="pt-6 flex justify-end">
+                            <button type="submit" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-700">
+                                Enviar a Google Sheets
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
             <?php endif; ?>
         </main>
     </div>
@@ -1083,7 +1031,6 @@ $can_complete = $user_can_act && $task_is_active;
     const adminUsersData = <?php echo json_encode($admin_users_list); ?>;
     const currentUserId = <?php echo $current_user_id; ?>;
     const currentUserRole = '<?php echo $current_user_role; ?>';
-    const currentUserName = '<?php echo htmlspecialchars($_SESSION['user_name'], ENT_QUOTES, 'UTF-8'); ?>';
     const apiUrlBase = 'api'; // Base para APIs normales
     const apiRealtimeBase = 'api/realtime'; // --- NUEVO: Base para APIs de tiempo real ---
     const initialCheckins = <?php echo json_encode($initial_checkins); ?>;
@@ -1532,7 +1479,7 @@ async function completeTask(taskId, formIdPrefix) {
 
         let payload = {
             instruction: instruction,
-            type: 'Asignacion', // Siempre es 'Asignacion' al (re)asignar desde la interfaz de tareas
+            type: alertId ? 'Asignacion' : 'Manual', // Determinar tipo basado en si hay alertId
             task_id: taskId,
             alert_id: alertId
         };
@@ -1548,24 +1495,16 @@ async function completeTask(taskId, formIdPrefix) {
 
     async function setReminder(alertId, taskId, formIdPrefix) {
         const reminderSelect = document.getElementById(`reminder-user-${formIdPrefix}`);
-        if (!reminderSelect) {
-            console.error("Elementos de formulario de recordatorio no encontrados.");
-            return;
-        }
+         if (!reminderSelect) {
+              console.error("Selector de usuario para recordatorio no encontrado.");
+              return;
+         }
         const userId = reminderSelect.value;
-
         if (!userId) {
-            alert('Por favor, selecciona un usuario para el recordatorio.');
-            return;
+             alert('Por favor, selecciona un usuario para el recordatorio.');
+             return;
         }
-
-        await sendTaskRequest({
-            assign_to: userId,
-            type: 'Recordatorio',
-            task_id: taskId,
-            alert_id: alertId,
-            notify_by_email: true // Siempre notificar por correo
-        });
+        await sendTaskRequest({ assign_to: userId, type: 'Recordatorio', task_id: taskId, alert_id: alertId });
     }
 
     async function sendTaskRequest(payload) {
@@ -1649,7 +1588,7 @@ async function handleCheckinSubmit(event) {
         if (!selectedValue) { alert('Selecciona un usuario o grupo.'); return; }
         if (start_datetime && end_datetime && start_datetime >= end_datetime) { alert('La fecha de fin debe ser posterior a la fecha de inicio.'); return; }
 
-        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null, notify_by_email: true };
+        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
         } else {
@@ -1734,35 +1673,9 @@ async function handleCheckinSubmit(event) {
             } else { alert('Error: ' + result.error); operatorPanel.classList.add('hidden'); }
         } catch (error) { console.error('Error en la consulta:', error); alert('Error de conexión.'); }
     }
-    function animateProgressBar(callback) {
-        const progressBar = document.getElementById('progress-bar');
-        const progressBarText = document.getElementById('progress-bar-text');
-        let width = 0;
-        progressBar.style.width = '0%';
-        progressBarText.textContent = '0%';
-
-        const interval = setInterval(() => {
-            if (width >= 100) {
-                clearInterval(interval);
-                if (callback) {
-                    // Short delay to ensure 100% is visible before executing callback
-                    setTimeout(callback, 100);
-                }
-            } else {
-                width++;
-                progressBar.style.width = width + '%';
-                progressBarText.textContent = width + '%';
-            }
-        }, 60); // 60ms * 100 = 6000ms = 6 seconds total
-    }
-
     async function handleDenominationSave(event) {
         event.preventDefault();
-        const loadingOverlay = document.getElementById('loading-overlay');
-        loadingOverlay.classList.remove('hidden');
-
-        animateProgressBar(async () => {
-            const payload = {
+        const payload = {
             check_in_id: document.getElementById('op-checkin-id').value,
             bills_100k: parseInt(document.querySelector('#denomination-form [data-value="100000"] .denomination-qty').value) || 0,
             bills_50k: parseInt(document.querySelector('#denomination-form [data-value="50000"] .denomination-qty').value) || 0,
@@ -1780,117 +1693,17 @@ async function handleCheckinSubmit(event) {
         try {
             const response = await fetch('api/operator_api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const result = await response.json();
-
             if (result.success) {
-                showToast(result.message || 'Conteo guardado correctamente.', 'success');
-                pollAlerts();
-
-                // 1. Ocultar y resetear el panel del operador
-                document.getElementById('operator-panel').classList.add('hidden');
-                document.getElementById('denomination-form').reset();
-                calculateTotals();
-
-                // 2. Añadir el nuevo registro a la tabla de historial
-                const historyTbody = document.getElementById('operator-history-table-body');
-                if (historyTbody) {
-                    const noRecordsRow = historyTbody.querySelector('td[colspan]');
-                    if (noRecordsRow) noRecordsRow.parentElement.remove();
-
-                    const newItem = {
-                        check_in_id: payload.check_in_id,
-                        invoice_number: document.getElementById('display-invoice').textContent,
-                        client_name: document.getElementById('display-client').textContent,
-                        declared_value: parseFloat(document.getElementById('display-declared').dataset.value) || 0,
-                        total_counted: payload.total_counted,
-                        discrepancy: payload.discrepancy,
-                        operator_name: window.currentUserName,
-                        count_date: new Date().toISOString(),
-                        observations: payload.observations
-                    };
-
-                    const discrepancyClass = newItem.discrepancy != 0 ? 'text-red-600 font-bold' : 'text-green-600';
-                    const showOperatorColumn = (currentUserRole === 'Admin' || currentUserRole === 'Digitador');
-                    const operatorColumn = showOperatorColumn ? `<td class="p-3">${newItem.operator_name}</td>` : '';
-                    const adminDeleteButton = currentUserRole === 'Admin' ? `<td class="p-3 text-center"><button onclick="deleteCheckIn(${newItem.check_in_id})" class="text-red-500 hover:text-red-700 font-semibold text-xs">Eliminar</button></td>` : '';
-
-                    const newRowHtml = `
-                        <tr class="border-b" style="background-color: #fefce8;">
-                            <td class="p-3 font-mono">${newItem.invoice_number}</td>
-                            <td class="p-3">${newItem.client_name}</td>
-                            <td class="p-3 text-right">${formatCurrency(newItem.declared_value)}</td>
-                            <td class="p-3 text-right">${formatCurrency(newItem.total_counted)}</td>
-                            <td class="p-3 text-right ${discrepancyClass}">${formatCurrency(newItem.discrepancy)}</td>
-                            ${operatorColumn}
-                            <td class="p-3 text-xs whitespace-nowrap">${new Date(newItem.count_date).toLocaleString('es-CO')}</td>
-                            <td class="p-3 text-xs max-w-xs truncate" title="${newItem.observations || ''}">${newItem.observations || 'N/A'}</td>
-                            ${adminDeleteButton}
-                        </tr>`;
-
-                    historyTbody.insertAdjacentHTML('afterbegin', newRowHtml);
-                    setTimeout(() => {
-                        const newRow = historyTbody.querySelector('tr[style]');
-                        if (newRow) newRow.style.backgroundColor = '';
-                    }, 3000);
-                }
-
-                // 3. Eliminar la planilla de la tabla de pendientes (si es visible para el Admin)
-                const pendingRowToRemove = document.getElementById(`operator-pending-row-${payload.check_in_id}`);
-                if (pendingRowToRemove) {
-                    pendingRowToRemove.remove();
-                    const pendingTbody = document.getElementById('operator-checkins-table-body');
-                    if (pendingTbody && pendingTbody.children.length === 0) {
-                        pendingTbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">No hay planillas pendientes por detallar.</td></tr>';
-                    }
-                }
-                 // También se actualiza la tabla de historial para el digitador.
-                const digitadorHistoryTbody = document.getElementById('digitador-operator-history-tbody');
-                if(digitadorHistoryTbody) {
-                    const noRecordsRow = digitadorHistoryTbody.querySelector('td[colspan]');
-                    if (noRecordsRow) noRecordsRow.parentElement.remove();
-
-                    const newItem = {
-                        check_in_id: payload.check_in_id,
-                        invoice_number: document.getElementById('display-invoice').textContent,
-                        client_name: document.getElementById('display-client').textContent,
-                        declared_value: parseFloat(document.getElementById('display-declared').dataset.value) || 0,
-                        total_counted: payload.total_counted,
-                        discrepancy: payload.discrepancy,
-                        operator_name: window.currentUserName,
-                        count_date: new Date().toISOString(),
-                        observations: payload.observations
-                    };
-                     const discrepancyClass = newItem.discrepancy != 0 ? 'text-red-600 font-bold' : 'text-green-600';
-                     const newRowHtml = `
-                        <tr class="border-b" style="background-color: #fefce8;">
-                            <td class="p-3 font-mono">${newItem.invoice_number}</td>
-                            <td class="p-3">${newItem.client_name}</td>
-                            <td class="p-3 text-right">${formatCurrency(newItem.declared_value)}</td>
-                            <td class="p-3 text-right">${formatCurrency(newItem.total_counted)}</td>
-                            <td class="p-3 text-right ${discrepancyClass}">${formatCurrency(newItem.discrepancy)}</td>
-                            <td class="p-3">${newItem.operator_name}</td>
-                            <td class="p-3 text-xs whitespace-nowrap">${new Date(newItem.count_date).toLocaleString('es-CO')}</td>
-                            <td class="p-3 text-xs max-w-xs truncate" title="${newItem.observations || ''}">${newItem.observations || 'N/A'}</td>
-                        </tr>`;
-
-                    digitadorHistoryTbody.insertAdjacentHTML('afterbegin', newRowHtml);
-                     setTimeout(() => {
-                        const newRow = digitadorHistoryTbody.querySelector('tr[style]');
-                        if (newRow) newRow.style.backgroundColor = '';
-                    }, 3000);
-                }
-
-
-            } else {
-                showToast(result.error || 'Error al guardar el conteo', 'error');
-            }
-        } catch (error) {
-            console.error('Error al guardar conteo:', error);
-            showToast('Error de conexión al guardar conteo', 'error');
-        } finally {
-            loadingOverlay.classList.add('hidden');
+                 showToast(result.message || 'Conteo guardado correctamente.', 'success');
+                 pollAlerts();
+                 setTimeout(() => {
+                    location.reload();
+                 }, 1000); // 1000ms = 1 segundo (para que el toast se alcance a leer)
+                }else {showToast(result.error || 'Error al guardar el conteo', 'error'); // ...por esto.
         }
-    });
-}
+        } catch (error) { console.error('Error al guardar conteo:', error);
+             showToast('Error de conexión al guardar conteo', 'error'); }
+    }
 
 
 
@@ -2827,7 +2640,6 @@ function updateAlertsDisplay(newAlerts) {
     newHighPriorityAlertsFound = false; // Resetear bandera
 
     newAlerts.forEach(alert => {
-        if (!alert) return; // --- FIX: Prevent crash on null/undefined alerts ---
         const isHighPriority = alert.priority === 'Critica' || alert.priority === 'Alta';
         const list = isHighPriority ? highPriorityList : mediumPriorityList;
         const colorClass = isHighPriority ? (alert.priority === 'Critica' ? 'red' : 'orange') : 'yellow';
@@ -3057,7 +2869,7 @@ async function pollAlerts() {
     async function switchTab(tabName) {
         sessionStorage.setItem('activeTab', tabName);
 
-        const staticContentPanels = ['operaciones', 'checkinero', 'operador', 'digitador', 'mi-historial', 'roles', 'trazabilidad'];
+        const staticContentPanels = ['operaciones', 'checkinero', 'operador', 'digitador', 'mi-historial', 'roles', 'trazabilidad', 'formulario'];
         const dynamicContentPanels = ['manage-clients', 'manage-routes', 'manage-funds'];
         const allContentPanels = staticContentPanels.concat(dynamicContentPanels);
 
@@ -3315,6 +3127,37 @@ setInterval(() => {
                   }
              });
         } // Cierre del if(startDateInput && endDateInput)
+
+        const googleSheetsForm = document.getElementById('google-sheets-form');
+        if (googleSheetsForm) {
+            googleSheetsForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                const formData = new FormData(googleSheetsForm);
+                const data = Object.fromEntries(formData.entries());
+
+                try {
+                    const response = await fetch('api/form_handler.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showToast('Datos enviados a Google Sheets con éxito.', 'success');
+                        googleSheetsForm.reset();
+                    } else {
+                        showToast('Error al enviar datos: ' + result.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error submitting to form_handler.php:', error);
+                    showToast('Error de conexión al enviar el formulario.', 'error');
+                }
+            });
+        }
     
     }); // Cierre del addEventListener 'DOMContentLoaded'
 </script>
