@@ -3359,17 +3359,17 @@ setInterval(() => {
                     fieldHTML += `<textarea class="w-full p-2 border-b-2" placeholder="Respuesta larga" disabled></textarea>`;
                     break;
                 case 'number':
-                     fieldHTML += `<input type="number" class="w-full p-2 border-b-2" placeholder="Número" disabled>`;
+                     fieldHTML += `<input type="number" class="w-full p-2 border-b-2" placeholder="Número" disabled style="background-image: none;">`;
                      break;
                 case 'radio':
                 case 'checkbox':
-                case 'select':
                     let optionsHTML = '';
                     if (Array.isArray(field.options)) {
                         field.options.forEach((option, index) => {
+                            const inputType = field.field_type === 'checkbox' ? 'checkbox' : 'radio';
                             optionsHTML += `
                                 <div class="flex items-center mb-2">
-                                    <input type="${field.field_type === 'checkbox' ? 'checkbox' : 'radio'}" name="field_${field.id}" disabled class="mr-2">
+                                    <input type="${inputType}" name="field_${field.id}" disabled class="mr-2">
                                     <input type="text" value="${option}" onchange="formBuilder.updateOption(${field.id}, ${index}, this.value)" class="w-full border-b-2 border-transparent focus:border-gray-300 outline-none p-1">
                                     <button onclick="formBuilder.deleteOption(${field.id}, ${index})" class="text-gray-400 hover:text-red-500 ml-2">&times;</button>
                                 </div>
@@ -3378,6 +3378,30 @@ setInterval(() => {
                     }
                      optionsHTML += `<button onclick="formBuilder.addOption(${field.id})" class="text-blue-600 text-sm mt-2">Añadir opción</button>`;
                     fieldHTML += optionsHTML;
+                    break;
+                case 'select':
+                    let selectOptionsHTML = '';
+                    if (Array.isArray(field.options)) {
+                         field.options.forEach((option, index) => {
+                            selectOptionsHTML += `
+                                <div class="flex items-center mb-2">
+                                     <span class="mr-2 text-gray-500">${index + 1}.</span>
+                                     <input type="text" value="${option}" onchange="formBuilder.updateOption(${field.id}, ${index}, this.value)" class="w-full border-b-2 border-transparent focus:border-gray-300 outline-none p-1">
+                                     <button onclick="formBuilder.deleteOption(${field.id}, ${index})" class="text-gray-400 hover:text-red-500 ml-2">&times;</button>
+                                 </div>
+                            `;
+                        });
+                    }
+                    selectOptionsHTML += `<button onclick="formBuilder.addOption(${field.id})" class="text-blue-600 text-sm mt-2">Añadir opción</button>`;
+                    fieldHTML += `
+                        <div class="mb-2">
+                             <select disabled class="w-full p-2 border bg-gray-100 rounded-md">
+                                 <option>${field.options && field.options[0] ? field.options[0] : 'Opción 1'}</option>
+                             </select>
+                        </div>
+                        <h4 class="text-sm font-semibold text-gray-600 mt-4 mb-2">Opciones del Desplegable:</h4>
+                        ${selectOptionsHTML}
+                    `;
                     break;
             }
 
