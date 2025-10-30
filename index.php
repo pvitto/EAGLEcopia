@@ -463,6 +463,25 @@ $conn->close();
 </head>
 <body class="bg-gray-100 text-gray-800">
 
+    <!-- Form Preview Modal -->
+    <div id="form-preview-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div id="form-preview-modal" class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 id="form-preview-title" class="text-xl font-bold text-gray-900">Vista Previa del Formulario</h3>
+                <button onclick="formBuilder.closePreview()" class="text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <p id="form-preview-description" class="text-gray-600 mb-6"></p>
+                <div id="form-preview-content" class="space-y-6">
+                    <!-- Los campos del formulario renderizados se insertarán aquí -->
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 border-t flex justify-end">
+                <button onclick="formBuilder.closePreview()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="user-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div id="user-modal" class="bg-white rounded-xl shadow-2xl w-full max-w-md">
             <div class="p-6">
@@ -599,8 +618,8 @@ $conn->close();
                    <button id="tab-manage-routes" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-routes')">Gestionar Rutas</button>
                    <button id="tab-manage-funds" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-funds')">Gestionar Fondos</button>
                    <button id="tab-trazabilidad" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('trazabilidad')">Trazabilidad</button>
-                   <button id="tab-formulario" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('formulario')">Formulario General</button>
                <?php endif; ?>
+               <button id="tab-formulario" class="nav-tab" onclick="switchTab('formulario')">Formulario General</button>
            </div></div>
        </nav>
 
@@ -3259,6 +3278,7 @@ setInterval(() => {
                         <span class="text-xs text-gray-500">Creado: ${new Date(form.created_at).toLocaleDateString()}</span>
                     </div>
                     <div>
+                        <button onclick="formBuilder.previewForm(${form.id})" class="text-green-600 font-semibold text-sm mr-4">Ver</button>
                         <button onclick="formBuilder.editForm(${form.id})" class="text-blue-600 font-semibold text-sm mr-4">Editar</button>
                         <button onclick="formBuilder.deleteForm(${form.id})" class="text-red-600 font-semibold text-sm">Eliminar</button>
                     </div>
@@ -3540,7 +3560,70 @@ setInterval(() => {
                  console.error('Error deleting field:', error);
                  alert('Error: ' + error.message);
             }
-         }
+         },
+
+        async previewForm(formId) {
+            try {
+                const response = await fetch(`${this.api}?action=get_form&id=${formId}`);
+                const form = await response.json();
+                if (form.error) {
+                    throw new Error(form.error);
+                }
+                this.renderPreview(form);
+            } catch (error) {
+                console.error('Error fetching form for preview:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        renderPreview(form) {
+            document.getElementById('form-preview-title').textContent = form.title;
+            document.getElementById('form-preview-description').textContent = form.description || '';
+            const contentContainer = document.getElementById('form-preview-content');
+            contentContainer.innerHTML = '';
+
+            form.fields.forEach(field => {
+                const fieldDiv = document.createElement('div');
+                fieldDiv.className = 'p-4 border rounded-md bg-gray-50';
+
+                let requiredSpan = field.is_required ? '<span class="text-red-500 ml-1">*</span>' : '';
+                let fieldHTML = `<label class="block text-md font-semibold text-gray-800 mb-3">${field.label}${requiredSpan}</label>`;
+
+                switch(field.field_type) {
+                    case 'text':
+                        fieldHTML += `<input type="text" class="w-full p-2 border border-gray-300 rounded-md">`;
+                        break;
+                    case 'textarea':
+                        fieldHTML += `<textarea class="w-full p-2 border border-gray-300 rounded-md" rows="4"></textarea>`;
+                        break;
+                    case 'number':
+                        fieldHTML += `<input type="number" class="w-full p-2 border border-gray-300 rounded-md">`;
+                        break;
+                    case 'radio':
+                        field.options.forEach(option => {
+                            fieldHTML += `<div class="flex items-center mb-2"><input type="radio" name="field_${field.id}" class="mr-2"><label>${option}</label></div>`;
+                        });
+                        break;
+                    case 'checkbox':
+                        field.options.forEach(option => {
+                            fieldHTML += `<div class="flex items-center mb-2"><input type="checkbox" class="mr-2"><label>${option}</label></div>`;
+                        });
+                        break;
+                    case 'select':
+                        let options = field.options.map(option => `<option>${option}</option>`).join('');
+                        fieldHTML += `<select class="w-full p-2 border border-gray-300 rounded-md">${options}</select>`;
+                        break;
+                }
+                fieldDiv.innerHTML = fieldHTML;
+                contentContainer.appendChild(fieldDiv);
+            });
+
+            document.getElementById('form-preview-overlay').classList.remove('hidden');
+        },
+
+        closePreview() {
+            document.getElementById('form-preview-overlay').classList.add('hidden');
+        }
     };
 
     // Initialize the form builder when the DOM is ready
