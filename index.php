@@ -683,6 +683,7 @@ $can_complete = $user_can_act && $task_is_active;
                                      <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                      <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                      <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
+                                     <div class="mt-2"><label class="inline-flex items-center"><input type="checkbox" id="send-email-<?php echo $form_id_prefix; ?>" class="form-checkbox h-5 w-5 text-blue-600" checked><span class="ml-2 text-sm text-gray-700">Notificar por correo</span></label></div>
                                      <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                 </div>
                                 <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
@@ -772,6 +773,7 @@ $can_complete = $user_can_act && $task_is_active;
                                             <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                             <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                             <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
+                                            <div class="mt-2"><label class="inline-flex items-center"><input type="checkbox" id="send-email-<?php echo $form_id_prefix; ?>" class="form-checkbox h-5 w-5 text-blue-600" checked><span class="ml-2 text-sm text-gray-700">Notificar por correo</span></label></div>
                                             <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                         </div>
                                         <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
@@ -1483,6 +1485,8 @@ async function completeTask(taskId, formIdPrefix) {
     async function submitAssignment(alertId, taskId, formIdPrefix) {
         const assignSelect = document.getElementById(`assign-user-${formIdPrefix}`);
         const instructionTextarea = document.getElementById(`task-instruction-${formIdPrefix}`);
+        const sendEmailCheckbox = document.getElementById(`send-email-${formIdPrefix}`);
+
 
          if (!assignSelect || !instructionTextarea) {
               console.error("Elementos de formulario no encontrados para asignar tarea.");
@@ -1491,6 +1495,8 @@ async function completeTask(taskId, formIdPrefix) {
 
         const selectedValue = assignSelect.value;
         const instruction = instructionTextarea.value;
+        const notify_by_email = sendEmailCheckbox ? sendEmailCheckbox.checked : false;
+
 
         // Validar que se seleccionó algo
         if (!selectedValue) {
@@ -1502,7 +1508,8 @@ async function completeTask(taskId, formIdPrefix) {
             instruction: instruction,
             type: alertId ? 'Asignacion' : 'Manual', // Determinar tipo basado en si hay alertId
             task_id: taskId,
-            alert_id: alertId
+            alert_id: alertId,
+            notify_by_email: notify_by_email
         };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');

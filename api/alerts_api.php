@@ -1,7 +1,7 @@
 <?php
 require '../config.php';
 require '../db_connection.php'; // Asegúrate que esta ruta sea correcta
-require_once '../send_email.php'; // Incluir la nueva utilidad de correo
+require_once 'send_email_api.php'; // Incluir la nueva utilidad de correo
 header('Content-Type: application/json');
 
 // Verificar que el usuario ha iniciado sesión
@@ -80,7 +80,7 @@ if ($method === 'POST') {
     $priority = $data['priority'] ?? 'Media'; // Default, puede cambiar
     $start_datetime = !empty($data['start_datetime']) ? $data['start_datetime'] : null;
     $end_datetime = !empty($data['end_datetime']) ? $data['end_datetime'] : null;
-    $notify_by_email = true; // Siempre enviar correo para asignaciones/recordatorios
+    $notify_by_email = $data['notify_by_email'] ?? false; // Usar el valor del frontend
 
     // ... (Validaciones y Lógica Grupal omitidas por brevedad, no tienen cambios) ...
      if ($assign_to_group) {
@@ -149,7 +149,7 @@ if ($method === 'POST') {
                                 <br>
                                 <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
                             ";
-                            send_task_email($user_data['email'], $user_data['name'], $subject, $body);
+                            send_email($user_data['email'], $subject, $body);
                         }
                     }
                 }
@@ -276,7 +276,7 @@ if ($method === 'POST') {
                                 <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
                             ";
                             if ($notify_by_email) {
-                                send_task_email($user_data['email'], $user_data['name'], $subject, $body);
+                                send_email($user_data['email'], $subject, $body);
                             }
                         }
                     }
