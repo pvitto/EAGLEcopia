@@ -29,10 +29,11 @@ try {
         $password = $_POST['password'] ?? '';
 
         // --- Validación ---
-        if (empty($name) || empty($email) || empty($role) || empty($gender)) {
-            throw new Exception("Todos los campos excepto la contraseña son obligatorios.");
+        if (empty($name) || empty($role) || empty($gender)) {
+            throw new Exception("Los campos de nombre, rol y género son obligatorios.");
         }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        // Validar email solo si se proporciona
+        if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new Exception("El formato del correo electrónico no es válido.");
         }
 

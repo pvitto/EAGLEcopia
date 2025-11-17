@@ -1,10 +1,8 @@
 <?php
 require '../config.php';
 require '../db_connection.php';
-// require_once '../send_email.php'; // Comentado temporalmente para diagnóstico
 header('Content-Type: application/json');
 
-// Session and permission check
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Operador'])) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'Acceso no autorizado.']);
@@ -14,11 +12,9 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 
 $method = $_SERVER['REQUEST_METHOD'];
 $user_id = $_SESSION['user_id'];
 
-// GET request handler
 if ($method === 'GET') {
     $planilla = $_GET['planilla'] ?? null;
     if (!$planilla) {
-        http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'No se proporcionó número de planilla.']);
         exit;
     }
@@ -41,15 +37,8 @@ if ($method === 'GET') {
     exit;
 }
 
-// POST request handler
 if ($method === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
-
-    if (json_last_error() !== JSON_ERROR_NONE || !isset($data['check_in_id'])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Datos inválidos o faltantes.']);
-        exit;
-    }
 
     $conn->begin_transaction();
     try {
@@ -57,96 +46,65 @@ if ($method === 'POST') {
             "INSERT INTO operator_counts (check_in_id, operator_id, bills_100k, bills_50k, bills_20k, bills_10k, bills_5k, bills_2k, coins, total_counted, discrepancy, observations) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
-
         $stmt_insert->bind_param("iiiiiiidddis", 
-            $data['check_in_id'], $user_id, $data['bills_100k'] ?? 0, $data['bills_50k'] ?? 0, $data['bills_20k'] ?? 0,
-            $data['bills_10k'] ?? 0, $data['bills_5k'] ?? 0, $data['bills_2k'] ?? 0, $data['coins'] ?? 0, $data['total_counted'] ?? 0,
-            $data['discrepancy'] ?? 0, $data['observations'] ?? ''
+            $data['check_in_id'], $user_id, $data['bills_100k'], $data['bills_50k'], $data['bills_20k'],
+            $data['bills_10k'], $data['bills_5k'], $data['bills_2k'], $data['coins'], $data['total_counted'],
+            $data['discrepancy'], $data['observations']
         );
         $stmt_insert->execute();
         $stmt_insert->close();
 
-        $discrepancy = $data['discrepancy'] ?? 0;
-        $check_in_id = $data['check_in_id'];
-        $new_status = ($discrepancy == 0) ? 'Procesado' : 'Discrepancia';
-
+        // Lógica estándar: marca como Procesado o Discrepancia. No auto-aprueba.
+        $new_status = ($data['discrepancy'] == 0) ? 'Procesado' : 'Discrepancia';
         $stmt_update = $conn->prepare("UPDATE check_ins SET status = ? WHERE id = ?");
-        $stmt_update->bind_param("si", $new_status, $check_in_id);
+        $stmt_update->bind_param("si", $new_status, $data['check_in_id']);
         $stmt_update->execute();
         $stmt_update->close();
 
-        if ($discrepancy != 0) {
-            $stmt_details = $conn->prepare("
-                SELECT ci.invoice_number, c.name as client_name, u.name as operator_name
-                FROM check_ins ci
-                JOIN clients c ON ci.client_id = c.id
-                JOIN users u ON u.id = ?
-                WHERE ci.id = ?
-            ");
-            $stmt_details->bind_param("ii", $user_id, $check_in_id);
-            $stmt_details->execute();
-            $details_result = $stmt_details->get_result()->fetch_assoc();
-            $stmt_details->close();
+        // Generar alerta solo si hay discrepancia
+        if ($data['discrepancy'] != 0) {
+            $check_in_id = $data['check_in_id'];
+            $res = $conn->query("SELECT invoice_number FROM check_ins WHERE id = $check_in_id");
+            $invoice_number = $res->fetch_assoc()['invoice_number'];
+            $discrepancy_formatted = number_format($data['discrepancy'], 0, ',', '.');
 
-            $invoice_number = $details_result['invoice_number'] ?? 'N/A';
-            $client_name = $details_result['client_name'] ?? 'N/A';
-            $operator_name = $details_result['operator_name'] ?? 'N/A';
-            $discrepancy_formatted = number_format($discrepancy, 0, ',', '.');
-            
             $alert_title = "Discrepancia en Planilla: " . $invoice_number;
-            $alert_desc = "Diferencia de $" . $discrepancy_formatted . ". Requiere revisión.";
+            $alert_desc = "Diferencia de $" . $discrepancy_formatted . ". Requiere revisión y seguimiento.";
             
             $stmt_alert = $conn->prepare("INSERT INTO alerts (title, description, priority, status, suggested_role, check_in_id) VALUES (?, ?, 'Critica', 'Pendiente', 'Digitador', ?)");
             $stmt_alert->bind_param("ssi", $alert_title, $alert_desc, $check_in_id);
+        // --- NUEVO CÓDIGO MEJORADO ---
             $stmt_alert->execute();
             $alert_id = $stmt_alert->insert_id;
             $stmt_alert->close();
 
+            // Asignar UNA tarea al GRUPO 'Digitador'
             if ($alert_id) {
-                $stmt_users = $conn->prepare("SELECT name, email FROM users WHERE role IN ('Digitador', 'Admin') AND email IS NOT NULL AND email != ''");
-                $stmt_users->execute();
-                $users_to_notify = $stmt_users->get_result()->fetch_all(MYSQLI_ASSOC);
-                $stmt_users->close();
+                $instruction = "Realizar seguimiento a la discrepancia (" . $invoice_number . "), contactar a los responsables y documentar la resolución.";
 
-                $subject = "[ALERTA CRÍTICA] Discrepancia Detectada en Planilla " . $invoice_number;
+                // Preparamos la inserción de la tarea asignada al grupo
+                $stmt_task = $conn->prepare("INSERT INTO tasks (alert_id, assigned_to_group, instruction, type, status, priority, created_by_user_id) VALUES (?, 'Digitador', ?, 'Asignacion', 'Pendiente', 'Critica', ?)");
 
-                // -- INICIO: Bloque de correo temporalmente comentado para diagnóstico --
-                /*
-                foreach ($users_to_notify as $user) {
-                    $body = "
-                        <h1>Alerta de Discrepancia</h1>
-                        <p>Hola " . htmlspecialchars($user['name']) . ",</p>
-                        <p>Se ha detectado una discrepancia monetaria que requiere tu atención inmediata.</p>
-                        <hr>
-                        <ul>
-                            <li><strong>Planilla Nro:</strong> " . htmlspecialchars($invoice_number) . "</li>
-                            <li><strong>Cliente:</strong> " . htmlspecialchars($client_name) . "</li>
-                            <li><strong>Operador:</strong> " . htmlspecialchars($operator_name) . "</li>
-                            <li><strong>Monto de la Discrepancia:</strong> $" . htmlspecialchars($discrepancy_formatted) . "</li>
-                        </ul>
-                        <p>Por favor, ingresa al sistema EAGLE 3.0 para revisar los detalles.</p>
-                        <br>
-                        <p><em>Este es un correo automático, por favor no respondas a este mensaje.</em></p>
-                    ";
-                    send_task_email($user['email'], $user['name'], $subject, $body);
-                }
-                */
-                // -- FIN: Bloque de correo temporalmente comentado --
+                // El created_by_user_id es el Operador que generó la discrepancia
+                $operator_user_id = $_SESSION['user_id'];
+
+                $stmt_task->bind_param("isi", $alert_id, $instruction, $operator_user_id);
+                $stmt_task->execute();
+                $stmt_task->close();
+
+                // Actualizamos el estado de la alerta
+                $conn->query("UPDATE alerts SET status = 'Asignada' WHERE id = $alert_id");
             }
+// --- FIN DEL NUEVO CÓDIGO ---
         }
-        
+
         $conn->commit();
         echo json_encode(['success' => true, 'message' => 'Conteo guardado exitosamente.']);
 
     } catch (Exception $e) {
         $conn->rollback();
-        http_response_code(500);
-        error_log("Operator API Error: " . $e->getMessage());
-        echo json_encode(['success' => false, 'error' => 'Error fatal en el servidor: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'error' => 'Error en la base de datos: ' . $e->getMessage()]);
     }
-} else {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Método no permitido.']);
 }
 
 $conn->close();

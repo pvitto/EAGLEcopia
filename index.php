@@ -346,6 +346,7 @@ $conn->close();
     <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
     <script src="js/jspdf.umd.min.js"></script>
     <script src="js/jspdf-autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -461,6 +462,25 @@ $conn->close();
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
+
+    <!-- Form Preview Modal -->
+    <div id="form-preview-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div id="form-preview-modal" class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h3 id="form-preview-title" class="text-xl font-bold text-gray-900">Vista Previa del Formulario</h3>
+                <button onclick="formBuilder.closePreview()" class="text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <p id="form-preview-description" class="text-gray-600 mb-6"></p>
+                <div id="form-preview-content" class="space-y-6">
+                    <!-- Los campos del formulario renderizados se insertarán aquí -->
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 border-t flex justify-end">
+                <button onclick="formBuilder.closePreview()" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <div id="user-modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div id="user-modal" class="bg-white rounded-xl shadow-2xl w-full max-w-md">
@@ -599,6 +619,7 @@ $conn->close();
                    <button id="tab-manage-funds" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('manage-funds')">Gestionar Fondos</button>
                    <button id="tab-trazabilidad" class="nav-tab <?php echo $role_nav_class; ?>" onclick="switchTab('trazabilidad')">Trazabilidad</button>
                <?php endif; ?>
+               <button id="tab-formulario" class="nav-tab" onclick="switchTab('formulario')">Formulario General</button>
            </div></div>
        </nav>
 
@@ -681,12 +702,13 @@ $can_complete = $user_can_act && $task_is_active;
                                      <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                      <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                      <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Confirmar</button>
+                                     <div class="mt-2"><label class="inline-flex items-center"><input type="checkbox" id="send-email-<?php echo $form_id_prefix; ?>" class="form-checkbox h-5 w-5 text-blue-600" checked><span class="ml-2 text-sm text-gray-700">Notificar por correo</span></label></div>
+                                     <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                 </div>
                                 <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                      <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                      <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                     <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
+                                     <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
                                 </div>
                             </div>
                         <?php endforeach; endif; ?>
@@ -700,17 +722,7 @@ $can_complete = $user_can_act && $task_is_active;
                     <div class="space-y-8">
                         <div class="bg-white p-6 rounded-xl shadow-sm">
                             <h2 class="text-lg font-semibold text-gray-900 mb-4">Crear Tarea Manual</h2>
-                            <form id="manual-task-form" class="space-y-3">
-                                <div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                <div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div>
-                                <div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                    <div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div>
-                                </div>
-                                <div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div>
-                                <button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Crear Tarea</button>
-                            </form>
+                            <form id="manual-task-form" class="space-y-3"><div><label for="manual-task-title" class="text-sm font-medium">Título</label><input type="text" id="manual-task-title" required class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-desc" class="text-sm font-medium">Descripción</label><textarea id="manual-task-desc" rows="3" class="w-full p-2 text-sm border rounded-md mt-1"></textarea></div><div><label for="manual-task-priority" class="text-sm font-medium">Prioridad</label><select id="manual-task-priority" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="Alta">Alta</option><option value="Media" selected>Media</option><option value="Baja">Baja</option></select></div><div class="grid grid-cols-2 gap-4"><div><label for="manual-task-start" class="text-sm font-medium">Inicio</label><input type="datetime-local" id="manual-task-start" class="w-full p-2 text-sm border rounded-md mt-1"></div><div><label for="manual-task-end" class="text-sm font-medium">Fin</label><input type="datetime-local" id="manual-task-end" class="w-full p-2 text-sm border rounded-md mt-1"></div></div><div><label for="manual-task-user" class="text-sm font-medium">Asignar a</label><select id="manual-task-user" required class="w-full p-2 text-sm border rounded-md mt-1"><option value="">Seleccionar...</option><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user):?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?> (<?php echo $user['role']; ?>)</option><?php endforeach; ?></optgroup></select></div><button type="submit" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-md">Crear Tarea</button></form>
                         </div>
 
                         <div class="bg-white p-6 rounded-xl shadow-sm">
@@ -780,12 +792,13 @@ $can_complete = $user_can_act && $task_is_active;
                                             <h4 class="text-sm font-semibold mb-2"><?php echo ($is_group_task || !empty($assigned_names)) ? 'Re-asignar' : 'Asignar'; ?> Tarea</h4>
                                             <select id="assign-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><optgroup label="Grupos"><option value="group-todos">Todos</option><option value="group-Operador">Operadores</option><option value="group-Checkinero">Checkineros</option><option value="group-Digitador">Digitadores</option></optgroup><optgroup label="Individuales"><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']) . " ({$user['role']})"; ?></option><?php endforeach; ?></optgroup></select>
                                             <textarea id="task-instruction-<?php echo $form_id_prefix; ?>" rows="2" class="w-full p-2 text-sm border rounded-md mt-2" placeholder="Instrucción"><?php echo htmlspecialchars($item['instruction'] ?? ''); ?></textarea>
-                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-4 rounded-md">Confirmar</button>
+                                            <div class="mt-2"><label class="inline-flex items-center"><input type="checkbox" id="send-email-<?php echo $form_id_prefix; ?>" class="form-checkbox h-5 w-5 text-blue-600" checked><span class="ml-2 text-sm text-gray-700">Notificar por correo</span></label></div>
+                                            <button type="button" onclick="submitAssignment(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-blue-600 text-white font-semibold py-2 mt-2 rounded-md">Confirmar</button>
                                         </div>
                                         <div id="reminder-form-<?php echo $form_id_prefix; ?>" class="task-form bg-gray-50 px-4">
                                             <h4 class="text-sm font-semibold mb-2">Crear Recordatorio</h4>
                                             <select id="reminder-user-<?php echo $form_id_prefix; ?>" class="w-full p-2 text-sm border rounded-md"><option value="">Seleccione usuario...</option><?php foreach ($all_users as $user): ?><option value="<?php echo $user['id']; ?>"><?php echo htmlspecialchars($user['name']); ?></option><?php endforeach; ?></select>
-                                            <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-3 rounded-md">Crear</button>
+                                            <button type="button" onclick="setReminder(<?php echo $alert_id_or_null; ?>, <?php echo $task_id_to_use; ?>, '<?php echo $form_id_prefix; ?>')" class="w-full bg-green-600 text-white font-semibold py-2 mt-2 rounded-md">Crear</button>
                                         </div>
                                     </div>
                                 <?php endforeach; endif; ?>
@@ -986,6 +999,69 @@ $can_complete = $user_can_act && $task_is_active;
             <div id="content-manage-clients" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-routes" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
             <div id="content-manage-funds" class="hidden"><div class="loader"></div><p class="text-center text-gray-500">Cargando...</p></div>
+
+            <div id="content-formulario" class="hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">Editor de Formularios Dinámicos</h2>
+                    <button id="create-new-form-btn" class="bg-green-600 text-white font-semibold px-4 py-2 rounded-lg">Crear Nuevo Formulario</button>
+                </div>
+
+                <!-- Lista de Formularios Existentes -->
+                <div id="forms-list-container" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+                    <h3 class="text-xl font-semibold mb-4">Mis Formularios</h3>
+                    <div id="forms-list" class="space-y-2">
+                        <!-- La lista de formularios se cargará aquí dinámicamente -->
+                        <p class="text-gray-500">Cargando formularios...</p>
+                    </div>
+                </div>
+
+                <!-- Editor de Formularios (inicialmente oculto) -->
+                <div id="form-editor-container" class="hidden">
+                    <div class="max-w-4xl mx-auto">
+                        <!-- Toolbar flotante para agregar campos -->
+                        <div class="sticky top-4 z-10 float-right -mr-24">
+                            <div class="bg-white p-2 rounded-lg border shadow-lg flex flex-col items-center space-y-2">
+                                <button onclick="formBuilder.addField('text')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Campo de Texto Corto">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                                </button>
+                                <button onclick="formBuilder.addField('textarea')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Campo de Párrafo">
+                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                                </button>
+                                <button onclick="formBuilder.addField('number')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Campo Numérico">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path></svg>
+                                </button>
+                                <button onclick="formBuilder.addField('radio')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Opción Múltiple (una respuesta)">
+                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                </button>
+                                <button onclick="formBuilder.addField('checkbox')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Casillas de Verificación (varias respuestas)">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                                </button>
+                                <button onclick="formBuilder.addField('select')" class="p-2 rounded-full hover:bg-gray-200" title="Añadir Menú Desplegable">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Cabecera del Formulario -->
+                        <div class="bg-white border-t-8 border-purple-600 rounded-lg shadow-md mb-4">
+                            <div class="p-6 border-b">
+                                <input type="text" id="form-title" placeholder="Título del formulario" class="text-3xl w-full border-b-2 border-transparent focus:border-purple-400 outline-none py-2">
+                                <textarea id="form-description" placeholder="Descripción del formulario" class="text-base w-full border-b-2 border-transparent focus:border-purple-400 outline-none py-2 mt-2 h-16 resize-none"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Contenedor para los campos del formulario -->
+                        <div id="form-fields-container" class="space-y-4">
+                            <!-- Los campos se renderizarán aquí -->
+                        </div>
+
+                        <div class="mt-8 flex justify-between">
+                             <button id="back-to-forms-list" class="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg">Volver a la Lista</button>
+                             <button id="save-form-changes" class="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg">Guardar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
         </main>
     </div>
@@ -1428,6 +1504,8 @@ async function completeTask(taskId, formIdPrefix) {
     async function submitAssignment(alertId, taskId, formIdPrefix) {
         const assignSelect = document.getElementById(`assign-user-${formIdPrefix}`);
         const instructionTextarea = document.getElementById(`task-instruction-${formIdPrefix}`);
+        const sendEmailCheckbox = document.getElementById(`send-email-${formIdPrefix}`);
+
 
          if (!assignSelect || !instructionTextarea) {
               console.error("Elementos de formulario no encontrados para asignar tarea.");
@@ -1436,6 +1514,8 @@ async function completeTask(taskId, formIdPrefix) {
 
         const selectedValue = assignSelect.value;
         const instruction = instructionTextarea.value;
+        const notify_by_email = sendEmailCheckbox ? sendEmailCheckbox.checked : false;
+
 
         // Validar que se seleccionó algo
         if (!selectedValue) {
@@ -1445,9 +1525,10 @@ async function completeTask(taskId, formIdPrefix) {
 
         let payload = {
             instruction: instruction,
-            type: 'Asignacion', // Siempre es 'Asignacion' al (re)asignar desde la interfaz de tareas
+            type: alertId ? 'Asignacion' : 'Manual', // Determinar tipo basado en si hay alertId
             task_id: taskId,
-            alert_id: alertId
+            alert_id: alertId,
+            notify_by_email: notify_by_email
         };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
@@ -1461,24 +1542,16 @@ async function completeTask(taskId, formIdPrefix) {
 
     async function setReminder(alertId, taskId, formIdPrefix) {
         const reminderSelect = document.getElementById(`reminder-user-${formIdPrefix}`);
-        if (!reminderSelect) {
-            console.error("Elementos de formulario de recordatorio no encontrados.");
-            return;
-        }
+         if (!reminderSelect) {
+              console.error("Selector de usuario para recordatorio no encontrado.");
+              return;
+         }
         const userId = reminderSelect.value;
-
         if (!userId) {
-            alert('Por favor, selecciona un usuario para el recordatorio.');
-            return;
+             alert('Por favor, selecciona un usuario para el recordatorio.');
+             return;
         }
-
-        await sendTaskRequest({
-            assign_to: userId,
-            type: 'Recordatorio',
-            task_id: taskId,
-            alert_id: alertId,
-            notify_by_email: true // Siempre notificar por correo
-        });
+        await sendTaskRequest({ assign_to: userId, type: 'Recordatorio', task_id: taskId, alert_id: alertId });
     }
 
     async function sendTaskRequest(payload) {
@@ -1562,7 +1635,7 @@ async function handleCheckinSubmit(event) {
         if (!selectedValue) { alert('Selecciona un usuario o grupo.'); return; }
         if (start_datetime && end_datetime && start_datetime >= end_datetime) { alert('La fecha de fin debe ser posterior a la fecha de inicio.'); return; }
 
-        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null, notify_by_email: true };
+        let payload = { title, instruction, type: 'Manual', priority, start_datetime: start_datetime || null, end_datetime: end_datetime || null };
         if (selectedValue.startsWith('group-')) {
              payload.assign_to_group = selectedValue.replace('group-', '');
         } else {
@@ -1668,7 +1741,7 @@ async function handleCheckinSubmit(event) {
             const response = await fetch('api/operator_api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const result = await response.json();
             if (result.success) {
-                 showToast(result.message || 'Conteo guardado correctamente.', 'success'); 
+                 showToast(result.message || 'Conteo guardado correctamente.', 'success');
                  pollAlerts();
                  setTimeout(() => {
                     location.reload();
@@ -2843,7 +2916,7 @@ async function pollAlerts() {
     async function switchTab(tabName) {
         sessionStorage.setItem('activeTab', tabName);
 
-        const staticContentPanels = ['operaciones', 'checkinero', 'operador', 'digitador', 'mi-historial', 'roles', 'trazabilidad'];
+        const staticContentPanels = ['operaciones', 'checkinero', 'operador', 'digitador', 'mi-historial', 'roles', 'trazabilidad', 'formulario'];
         const dynamicContentPanels = ['manage-clients', 'manage-routes', 'manage-funds'];
         const allContentPanels = staticContentPanels.concat(dynamicContentPanels);
 
@@ -3101,8 +3174,464 @@ setInterval(() => {
                   }
              });
         } // Cierre del if(startDateInput && endDateInput)
+
+        const googleSheetsForm = document.getElementById('google-sheets-form');
+        if (googleSheetsForm) {
+            googleSheetsForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                const formData = new FormData(googleSheetsForm);
+                const data = Object.fromEntries(formData.entries());
+
+                try {
+                    const response = await fetch('api/form_handler.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showToast('Datos enviados a Google Sheets con éxito.', 'success');
+                        googleSheetsForm.reset();
+                    } else {
+                        showToast('Error al enviar datos: ' + result.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error submitting to form_handler.php:', error);
+                    showToast('Error de conexión al enviar el formulario.', 'error');
+                }
+            });
+        }
     
     }); // Cierre del addEventListener 'DOMContentLoaded'
+
+    const formBuilder = {
+        forms: [],
+        currentForm: null,
+        api: 'api/dynamic_forms_api.php',
+
+        init() {
+            // Cache DOM elements
+            this.dom = {
+                listContainer: document.getElementById('forms-list-container'),
+                editorContainer: document.getElementById('form-editor-container'),
+                formsList: document.getElementById('forms-list'),
+                createBtn: document.getElementById('create-new-form-btn'),
+                backBtn: document.getElementById('back-to-forms-list'),
+                saveBtn: document.getElementById('save-form-changes'),
+                formTitle: document.getElementById('form-title'),
+                formDescription: document.getElementById('form-description'),
+                fieldsContainer: document.getElementById('form-fields-container')
+            };
+
+            // Attach event listeners
+            this.dom.createBtn.addEventListener('click', () => this.createNewForm());
+            this.dom.backBtn.addEventListener('click', () => this.showListView());
+            this.dom.saveBtn.addEventListener('click', () => this.saveFormChanges());
+
+            this.loadForms();
+        },
+
+        async deleteForm(formId) {
+            if (!confirm('¿Está seguro de que desea eliminar este formulario y todos sus campos?')) return;
+
+            try {
+                const response = await fetch(`${this.api}?action=delete_form&id=${formId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.message.includes('success')) {
+                    this.loadForms();
+                } else {
+                    throw new Error(result.error || 'Failed to delete form');
+                }
+            } catch (error) {
+                console.error('Error deleting form:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        async loadForms() {
+            try {
+                const response = await fetch(`${this.api}?action=get_forms`);
+                this.forms = await response.json();
+                this.renderFormsList();
+            } catch (error) {
+                console.error('Error loading forms:', error);
+                this.dom.formsList.innerHTML = '<p class="text-red-500">Error al cargar formularios.</p>';
+            }
+        },
+
+        renderFormsList() {
+            this.dom.formsList.innerHTML = '';
+            if (this.forms.length === 0) {
+                this.dom.formsList.innerHTML = '<p class="text-gray-500">No se han creado formularios todavía.</p>';
+                return;
+            }
+            this.forms.forEach(form => {
+                const formElement = document.createElement('div');
+                formElement.className = 'flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50';
+                formElement.innerHTML = `
+                    <div>
+                        <p class="font-semibold">${form.title}</p>
+                        <span class="text-xs text-gray-500">Creado: ${new Date(form.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div>
+                        <button onclick="formBuilder.previewForm(${form.id})" class="text-green-600 font-semibold text-sm mr-4">Ver</button>
+                        <button onclick="formBuilder.editForm(${form.id})" class="text-blue-600 font-semibold text-sm mr-4">Editar</button>
+                        <button onclick="formBuilder.deleteForm(${form.id})" class="text-red-600 font-semibold text-sm">Eliminar</button>
+                    </div>
+                `;
+                this.dom.formsList.appendChild(formElement);
+            });
+        },
+
+        showEditorView() {
+            this.dom.listContainer.classList.add('hidden');
+            this.dom.editorContainer.classList.remove('hidden');
+        },
+
+        showListView() {
+            this.dom.editorContainer.classList.add('hidden');
+            this.dom.listContainer.classList.remove('hidden');
+            this.currentForm = null;
+        },
+
+        async createNewForm() {
+            const title = prompt("Ingrese el título para el nuevo formulario:");
+            if (!title) return;
+
+            try {
+                const response = await fetch(`${this.api}?action=create_form`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, description: '' })
+                });
+                const result = await response.json();
+                if (result.form_id) {
+                    await this.loadForms();
+                    this.editForm(result.form_id);
+                } else {
+                    throw new Error(result.error || 'Failed to create form');
+                }
+            } catch (error) {
+                console.error('Error creating form:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        async editForm(formId) {
+            try {
+                const response = await fetch(`${this.api}?action=get_form&id=${formId}`);
+                this.currentForm = await response.json();
+                if (this.currentForm.error) {
+                    throw new Error(this.currentForm.error);
+                }
+
+                // Populate editor fields
+                this.dom.formTitle.value = this.currentForm.title;
+                this.dom.formDescription.value = this.currentForm.description || '';
+
+                this.renderFormFields();
+                this.initSortable();
+                this.showEditorView();
+
+            } catch (error) {
+                console.error('Error fetching form:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        initSortable() {
+            if (this.sortableInstance) {
+                this.sortableInstance.destroy();
+            }
+            this.sortableInstance = new Sortable(this.dom.fieldsContainer, {
+                animation: 150,
+                handle: '.field-wrapper',
+                ghostClass: 'bg-blue-100',
+            });
+        },
+
+        renderFormFields() {
+            this.dom.fieldsContainer.innerHTML = '';
+            if (!this.currentForm || !this.currentForm.fields) return;
+
+            this.currentForm.fields.forEach(field => {
+                const fieldWrapper = this.createFieldElement(field);
+                this.dom.fieldsContainer.appendChild(fieldWrapper);
+            });
+        },
+
+        createFieldElement(field) {
+            const fieldWrapper = document.createElement('div');
+            fieldWrapper.className = 'bg-white p-6 rounded-lg shadow-md border border-gray-200 field-wrapper';
+            fieldWrapper.dataset.fieldId = field.id;
+
+            let fieldHTML = `
+                <div class="flex justify-between items-start mb-4">
+                    <input type="text" value="${field.label}" onchange="formBuilder.updateField(${field.id}, 'label', this.value)" class="text-lg w-full font-medium border-b-2 border-transparent focus:border-purple-400 outline-none">
+                    <button onclick="formBuilder.deleteField(${field.id})" class="text-red-500 hover:text-red-700 ml-4">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            `;
+
+            switch(field.field_type) {
+                case 'text':
+                    fieldHTML += `<input type="text" class="w-full p-2 border-b-2" placeholder="Respuesta corta" disabled>`;
+                    break;
+                case 'textarea':
+                    fieldHTML += `<textarea class="w-full p-2 border-b-2" placeholder="Respuesta larga" disabled></textarea>`;
+                    break;
+                case 'number':
+                     fieldHTML += `<input type="number" class="w-full p-2 border-b-2" placeholder="Número" disabled style="background-image: none;">`;
+                     break;
+                case 'radio':
+                case 'checkbox':
+                    let optionsHTML = '';
+                    if (Array.isArray(field.options)) {
+                        field.options.forEach((option, index) => {
+                            const inputType = field.field_type === 'checkbox' ? 'checkbox' : 'radio';
+                            optionsHTML += `
+                                <div class="flex items-center mb-2">
+                                    <input type="${inputType}" name="field_${field.id}" disabled class="mr-2">
+                                    <input type="text" value="${option}" onchange="formBuilder.updateOption(${field.id}, ${index}, this.value)" class="w-full border-b-2 border-transparent focus:border-gray-300 outline-none p-1">
+                                    <button onclick="formBuilder.deleteOption(${field.id}, ${index})" class="text-gray-400 hover:text-red-500 ml-2">&times;</button>
+                                </div>
+                            `;
+                        });
+                    }
+                     optionsHTML += `<button onclick="formBuilder.addOption(${field.id})" class="text-blue-600 text-sm mt-2">Añadir opción</button>`;
+                    fieldHTML += optionsHTML;
+                    break;
+                case 'select':
+                    let selectOptionsHTML = '';
+                    if (Array.isArray(field.options)) {
+                         field.options.forEach((option, index) => {
+                            selectOptionsHTML += `
+                                <div class="flex items-center mb-2">
+                                     <span class="mr-2 text-gray-500">${index + 1}.</span>
+                                     <input type="text" value="${option}" onchange="formBuilder.updateOption(${field.id}, ${index}, this.value)" class="w-full border-b-2 border-transparent focus:border-gray-300 outline-none p-1">
+                                     <button onclick="formBuilder.deleteOption(${field.id}, ${index})" class="text-gray-400 hover:text-red-500 ml-2">&times;</button>
+                                 </div>
+                            `;
+                        });
+                    }
+                    selectOptionsHTML += `<button onclick="formBuilder.addOption(${field.id})" class="text-blue-600 text-sm mt-2">Añadir opción</button>`;
+                    fieldHTML += `
+                        <div class="mb-2">
+                             <select disabled class="w-full p-2 border bg-gray-100 rounded-md">
+                                 <option>${field.options && field.options[0] ? field.options[0] : 'Opción 1'}</option>
+                             </select>
+                        </div>
+                        <h4 class="text-sm font-semibold text-gray-600 mt-4 mb-2">Opciones del Desplegable:</h4>
+                        ${selectOptionsHTML}
+                    `;
+                    break;
+            }
+
+            fieldHTML += `
+                <div class="border-t mt-4 pt-2 text-right">
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" ${field.is_required ? 'checked' : ''} onchange="formBuilder.updateField(${field.id}, 'is_required', this.checked)">
+                        <span class="ml-2 text-sm text-gray-600">Obligatorio</span>
+                    </label>
+                </div>
+            `;
+
+            fieldWrapper.innerHTML = fieldHTML;
+            return fieldWrapper;
+        },
+
+        async addField(fieldType) {
+            if (!this.currentForm) return;
+
+            const newField = {
+                form_id: this.currentForm.id,
+                label: 'Pregunta sin título',
+                field_type: fieldType,
+                is_required: false,
+                options: ['Opción 1']
+            };
+
+            try {
+                const response = await fetch(`${this.api}?action=add_field`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newField)
+                });
+                const result = await response.json();
+                if (result.field_id) {
+                    // Refresh the entire form to get correct order and new field
+                    this.editForm(this.currentForm.id);
+                } else {
+                    throw new Error(result.error || 'Failed to add field');
+                }
+            } catch (error) {
+                console.error('Error adding field:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        updateField(fieldId, key, value) {
+            const field = this.currentForm.fields.find(f => f.id === fieldId);
+            if(field) {
+                field[key] = value;
+            }
+        },
+
+        updateOption(fieldId, optionIndex, value) {
+             const field = this.currentForm.fields.find(f => f.id === fieldId);
+             if (field && field.options[optionIndex] !== undefined) {
+                 field.options[optionIndex] = value;
+             }
+        },
+
+         addOption(fieldId) {
+             const field = this.currentForm.fields.find(f => f.id === fieldId);
+             if (field) {
+                 field.options.push(`Opción ${field.options.length + 1}`);
+                 this.renderFormFields();
+             }
+         },
+
+         deleteOption(fieldId, optionIndex) {
+             const field = this.currentForm.fields.find(f => f.id === fieldId);
+             if (field && field.options[optionIndex] !== undefined) {
+                 field.options.splice(optionIndex, 1);
+                 this.renderFormFields();
+             }
+         },
+
+         async saveFormChanges() {
+            if (!this.currentForm) return;
+
+            try {
+                // 1. Save Form Title/Description
+                 await fetch(`${this.api}?action=update_form`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: this.currentForm.id,
+                        title: this.dom.formTitle.value,
+                        description: this.dom.formDescription.value
+                    })
+                });
+
+                // 2. Save all individual field changes
+                for (const field of this.currentForm.fields) {
+                    await fetch(`${this.api}?action=update_field`, {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(field)
+                     });
+                }
+
+                // 3. Save the new field order
+                const orderedIds = this.sortableInstance.toArray().map(id => parseInt(id));
+                await fetch(`${this.api}?action=update_field_order`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ordered_ids: orderedIds })
+                });
+
+                alert('Formulario guardado con éxito!');
+                this.loadForms();
+
+            } catch(error) {
+                console.error('Error saving form:', error);
+                alert('Error al guardar el formulario.');
+            }
+         },
+
+         async deleteField(fieldId) {
+            if (!confirm('¿Está seguro de que desea eliminar este campo?')) return;
+            try {
+                const response = await fetch(`${this.api}?action=delete_field&id=${fieldId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.message.includes('success')) {
+                    this.editForm(this.currentForm.id); // Refresh
+                } else {
+                    throw new Error(result.error || 'Failed to delete field');
+                }
+            } catch (error) {
+                 console.error('Error deleting field:', error);
+                 alert('Error: ' + error.message);
+            }
+         },
+
+        async previewForm(formId) {
+            try {
+                const response = await fetch(`${this.api}?action=get_form&id=${formId}`);
+                const form = await response.json();
+                if (form.error) {
+                    throw new Error(form.error);
+                }
+                this.renderPreview(form);
+            } catch (error) {
+                console.error('Error fetching form for preview:', error);
+                alert('Error: ' + error.message);
+            }
+        },
+
+        renderPreview(form) {
+            document.getElementById('form-preview-title').textContent = form.title;
+            document.getElementById('form-preview-description').textContent = form.description || '';
+            const contentContainer = document.getElementById('form-preview-content');
+            contentContainer.innerHTML = '';
+
+            form.fields.forEach(field => {
+                const fieldDiv = document.createElement('div');
+                fieldDiv.className = 'p-4 border rounded-md bg-gray-50';
+
+                let requiredSpan = field.is_required ? '<span class="text-red-500 ml-1">*</span>' : '';
+                let fieldHTML = `<label class="block text-md font-semibold text-gray-800 mb-3">${field.label}${requiredSpan}</label>`;
+
+                switch(field.field_type) {
+                    case 'text':
+                        fieldHTML += `<input type="text" class="w-full p-2 border border-gray-300 rounded-md">`;
+                        break;
+                    case 'textarea':
+                        fieldHTML += `<textarea class="w-full p-2 border border-gray-300 rounded-md" rows="4"></textarea>`;
+                        break;
+                    case 'number':
+                        fieldHTML += `<input type="number" class="w-full p-2 border border-gray-300 rounded-md">`;
+                        break;
+                    case 'radio':
+                        field.options.forEach(option => {
+                            fieldHTML += `<div class="flex items-center mb-2"><input type="radio" name="field_${field.id}" class="mr-2"><label>${option}</label></div>`;
+                        });
+                        break;
+                    case 'checkbox':
+                        field.options.forEach(option => {
+                            fieldHTML += `<div class="flex items-center mb-2"><input type="checkbox" class="mr-2"><label>${option}</label></div>`;
+                        });
+                        break;
+                    case 'select':
+                        let options = field.options.map(option => `<option>${option}</option>`).join('');
+                        fieldHTML += `<select class="w-full p-2 border border-gray-300 rounded-md">${options}</select>`;
+                        break;
+                }
+                fieldDiv.innerHTML = fieldHTML;
+                contentContainer.appendChild(fieldDiv);
+            });
+
+            document.getElementById('form-preview-overlay').classList.remove('hidden');
+        },
+
+        closePreview() {
+            document.getElementById('form-preview-overlay').classList.add('hidden');
+        }
+    };
+
+    // Initialize the form builder when the DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        if (document.getElementById('content-formulario')) {
+            formBuilder.init();
+        }
+    });
 </script>
 
    <div id="toast-container" class="fixed bottom-4 right-4 z-[110] space-y-2">
